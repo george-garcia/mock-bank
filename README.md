@@ -32,9 +32,10 @@ A complete mock bank application using real card issuing technology (Lithic sand
 
 3. **Set up environment variables**
    ```bash
-   cp .env.example .env
-   # Edit .env with your values (especially Lithic API key)
+   cp .env.example .env.local
+   # Edit .env.local with your values (especially Lithic API key)
    ```
+   > **⚠️ Security:** Never commit real API keys or secrets. `.env.local` is gitignored for this reason. The tracked `.env` only contains safe development defaults.
 
 4. **Run database migrations**
    ```bash
@@ -84,13 +85,13 @@ mock-bank/
 See [PROJECT_PLAN.md](./PROJECT_PLAN.md) for the full breakdown.
 
 1. ✅ Project Scaffolding
-2. 🔄 Database Schema & Drizzle ORM
-3. ⏳ Core Banking API
-4. ⏳ Lithic Card Integration
-5. ⏳ Mock Deposit/Withdrawal Engine
-6. ⏳ Frontend Foundation
-7. ⏳ Frontend Features
-8. ⏳ Polish & Testing
+2. ✅ Database Schema & Drizzle ORM
+3. ✅ Core Banking API
+4. ✅ Lithic Card Integration
+5. ✅ Mock Deposit/Withdrawal Engine
+6. ✅ Frontend Foundation
+7. ✅ Frontend Features
+8. 🔄 Polish & Testing (in progress)
 
 ## License
 
