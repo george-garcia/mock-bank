@@ -1,0 +1,127 @@
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { CardsRepository } from './cards.repository';
+import { AccountsRepository } from '../accounts/accounts.repository';
+import { LithicService } from '../lithic/lithic.service';
+import { AccountsService } from '../accounts/accounts.service';
+import { NewCard, NewCardTransaction } from '@mock-bank/database';
+
+@Injectable()
+export class CardsService {
+  constructor(
+    private cardsRepository: CardsRepository,
+    private accountsRepository: AccountsRepository,
+    private lithicService: LithicService,
+    private accountsService: AccountsService,
+  ) {}
+
+  async createCard(userId: number, accountId: number, data: { spendLimit?: string; spendLimitPeriod?: string; memo?: string }) {
+    // Verify account ownership
+    const account = await this.accountsService.findOne(accountId, userId);
+
+    // Create card in Lithic
+    const lithicCard = await this.lithicService.createCard({
+      type: 'VIRTUAL',
+      spend_limit: data.spendLimit ? parseFloat(data.spendLimit) : undefined,
+      spend_limit_duration: data.spendLimitPeriod as any,
+      memo: data.memo,
+    });
+
+    // Store in our DB
+    const card = await this.cardsRepository.create({
+      accountId,
+      lithicCardToken: lithicCard.token,
+      lastFour: lithicCard.last_four,
+      cardNumber: lithicCard.card_number,
+      expiryMonth: lithicCard.exp_month,
+      expiryYear: lithicCard.exp_year,
+      status: 'active',
+      spendLimit: data.spendLimit,
+      spendLimitPeriod: data.spendLimitPeriod,
+    });
+
+    return card;
+  }
+
+  async findAllByUser(userId: number) {
+    // Get all accounts for user, then all cards for those accounts
+    const userAccounts = await this.accountsService.findAllByUser(userId);
+    const accountIds = userAccounts.map(a => a.id);
+
+    if (accountIds.length === 0) return [];
+
+    // Get cards for all user accounts
+    const allCards: any[] = [];
+    for (const accountId of accountIds) {
+      const cards = await this.cardsRepository.findByAccountId(accountId);
+      allCards.push(...cards);
+    }
+    return allCards;
+  }
+
+  async findOne(id: number, userId: number) {
+    const card = await this.cardsRepository.findById(id);
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+    // Verify ownership via account
+    await this.accountsService.findOne(card.accountId, userId);
+    return card;
+  }
+
+  async findByLithicToken(token: string) {
+    return this.cardsRepository.findByLithicToken(token);
+  }
+
+  async getAccountForCard(cardId: number) {
+    const card = await this.cardsRepository.findById(cardId);
+    if (!card) throw new NotFoundException('Card not found');
+    const account = await this.accountsRepository.findById(card.accountId);
+    if (!account) throw new NotFoundException('Account not found');
+    return account;
+  }
+
+  async freezeCard(id: number, userId: number) {
+    const card = await this.findOne(id, userId);
+    if (card.lithicCardToken) {
+      await this.lithicService.updateCardState(card.lithicCardToken, 'PAUSED');
+    }
+    return this.cardsRepository.updateStatus(id, 'frozen');
+  }
+
+  async unfreezeCard(id: number, userId: number) {
+    const card = await this.findOne(id, userId);
+    if (card.lithicCardToken) {
+      await this.lithicService.updateCardState(card.lithicCardToken, 'OPEN');
+    }
+    return this.cardsRepository.updateStatus(id, 'active');
+  }
+
+  async cancelCard(id: number, userId: number) {
+    const card = await this.findOne(id, userId);
+    if (card.lithicCardToken) {
+      await this.lithicService.updateCardState(card.lithicCardToken, 'CLOSED');
+    }
+    return this.cardsRepository.updateStatus(id, 'cancelled');
+  }
+
+  // Card transaction helpers
+  async recordCardTransaction(cardId: number, data: Omit<NewCardTransaction, 'cardId'>) {
+    return this.cardsRepository.createCardTransaction({
+      ...data,
+      cardId,
+    });
+  }
+
+  async findCardTransactionByLithicToken(token: string) {
+    return this.cardsRepository.findCardTransactionByLithicToken(token);
+  }
+
+  async findCardTransactions(cardId: number, userId: number) {
+    await this.findOne(cardId, userId); // Verify ownership
+    return this.cardsRepository.findCardTransactionsByCardId(cardId);
+  }
+
+  async settleCardTransaction(id: number, lithicToken: string) {
+    return this.cardsRepository.updateCardTransactionStatus(id, 'settled');
+  }
+}

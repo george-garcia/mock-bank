@@ -1,0 +1,73 @@
+{
+  "name": "Mock Bank",
+  "description": "Complete mock bank with Lithic card issuing, NestJS API, and Vite React frontend",
+  "currentPhase": 4,
+  "totalPhases": 8,
+  "phases": [
+    {
+      "id": 1,
+      "name": "Project Scaffolding",
+      "status": "completed",
+      "startedAt": "2026-05-19T20:45:00.000Z",
+      "completedAt": "2026-05-19T20:45:00.000Z"
+    },
+    {
+      "id": 2,
+      "name": "Database Schema & Drizzle ORM",
+      "status": "completed",
+      "startedAt": "2026-05-19T22:45:00.000Z",
+      "completedAt": "2026-05-19T22:45:00.000Z"
+    },
+    {
+      "id": 3,
+      "name": "Core Banking API (Users & Accounts)",
+      "status": "completed",
+      "startedAt": "2026-05-20T17:50:00.000Z",
+      "completedAt": "2026-05-20T18:00:00.000Z"
+    },
+    {
+      "id": 4,
+      "name": "Lithic Card Issuer Integration",
+      "status": "completed",
+      "startedAt": "2026-05-20T18:35:00.000Z",
+      "completedAt": "2026-05-20T19:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "name": "Mock Deposit & Withdrawal Engine",
+      "status": "completed",
+      "startedAt": "2026-05-20T20:57:00.000Z",
+      "completedAt": "2026-05-20T21:10:00.000Z"
+    },
+    {
+      "id": 6,
+      "name": "Frontend Foundation",
+      "status": "completed",
+      "startedAt": "2026-05-21T00:00:00.000Z",
+      "completedAt": "2026-05-21T00:07:00.000Z"
+    },
+    {
+      "id": 7,
+      "name": "Frontend Features",
+      "status": "completed",
+      "startedAt": "2026-05-21T01:36:00.000Z",
+      "completedAt": "2026-05-21T01:48:00.000Z"
+    },
+    {
+      "id": 8,
+      "name": "Polish & Testing",
+      "status": "pending",
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+  "notes": [
+    "Phase 2 completed: Schema generated successfully with Drizzle Kit",
+    "Phase 3 completed: Core Banking API with JWT auth, accounts, and transactions",
+    "Phase 4 completed: Lithic card integration with mock adapter and webhook handler",
+    "Phase 7 completed: Deposit/withdraw/transfer forms, quick actions on dashboard, card transaction modal, real-time balance updates via query invalidation",
+    "Migration file: migrations/0000_tired_deadpool.sql",
+    "Tables: users, accounts, transactions, cards, card_transactions",
+    "Enums: account_type, account_status, transaction_type, transaction_status, card_status, card_transaction_status"
+  ]
+}

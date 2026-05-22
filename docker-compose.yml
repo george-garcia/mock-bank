@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mockbank-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mockbank
+      POSTGRES_PASSWORD: mockbank_dev_password
+      POSTGRES_DB: mockbank
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mockbank -d mockbank"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: mockbank-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://mockbank:mockbank_dev_password@postgres:5432/mockbank
+      JWT_SECRET: mockbank-dev-secret-change-in-production
+      LITHIC_API_KEY: ${LITHIC_API_KEY:-mock-key}
+      LITHIC_BASE_URL: ${LITHIC_BASE_URL:-https://sandbox.lithic.com/v1}
+      FRONTEND_URL: http://localhost:5173
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+    command: pnpm --filter @mock-bank/api start:dev
+
+volumes:
+  postgres_data:
