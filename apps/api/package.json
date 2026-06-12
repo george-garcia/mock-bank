@@ -11,7 +11,8 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:cov": "jest --coverage"
+    "test:cov": "jest --coverage",
+    "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
     "@mock-bank/database": "workspace:*",
@@ -23,15 +24,18 @@
     "@nestjs/passport": "^10.0.0",
     "@nestjs/platform-express": "^10.3.0",
     "@nestjs/swagger": "^7.3.0",
+    "@nestjs/throttler": "^5.0.0",
     "bcryptjs": "^2.4.3",
-    "drizzle-orm": "^0.31.0",
-    "postgres": "^3.4.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "drizzle-orm": "^0.31.0",
+    "nest-winston": "^1.9.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "postgres": "^3.4.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "winston": "^3.13.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
@@ -43,10 +47,12 @@
     "@types/jest": "^29.5.12",
     "@types/node": "^20.12.0",
     "@types/passport-jwt": "^4.0.1",
+    "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^7.8.0",
     "@typescript-eslint/parser": "^7.8.0",
     "eslint": "^8.57.0",
     "jest": "^29.7.0",
+    "supertest": "^7.2.2",
     "ts-jest": "^29.1.0",
     "ts-loader": "^9.5.0",
     "ts-node": "^10.9.0",

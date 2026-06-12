@@ -6,6 +6,8 @@
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "test:e2e": "pnpm --filter e2e test",
+    "test:e2e:ui": "pnpm --filter e2e test:ui",
     "db:migrate": "pnpm --filter database migrate",
     "db:seed": "pnpm --filter database seed",
     "db:studio": "pnpm --filter database studio",
