@@ -1,8 +1,11 @@
-import { IsOptional, IsString, IsNumberString } from 'class-validator';
+import { IsOptional, IsString, IsNumberString, IsInt } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateWithdrawalDto {
   @ApiProperty({ example: 1 })
+  @IsInt()
+  @Type(() => Number)
   accountId: number;
 
   @ApiProperty({ example: '100.00' })

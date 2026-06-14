@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
-import { cardsApi } from '../../lib/api';
+import { useCardTransactions } from '../../hooks/useCardTransactions';
 import { Badge } from '../ui/Badge';
 import { Receipt, X } from 'lucide-react';
 
@@ -10,67 +9,67 @@ interface CardTransactionsModalProps {
 }
 
 export function CardTransactionsModal({ cardId, cardLastFour, onClose }: CardTransactionsModalProps) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['card-transactions', cardId],
-    queryFn: () => cardsApi.transactions(cardId),
-  });
-
-  const transactions = data?.data?.data || [];
+  const { transactions, isLoading } = useCardTransactions(cardId);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-bank-100 rounded-lg flex items-center justify-center">
-              <Receipt className="w-5 h-5 text-bank-600" />
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+      <div className="bg-surface border border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden animate-slide-up">
+        <div className="p-6 border-b border-white/5 flex items-center justify-between bg-surface-highlight/30">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center border border-accent/20 shadow-[0_0_15px_rgba(139,92,246,0.2)]">
+              <Receipt className="w-6 h-6 text-accent-light" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Card Transactions</h3>
-              <p className="text-sm text-gray-500">•••• {cardLastFour}</p>
+              <h3 className="text-xl font-display font-semibold text-content">Card Transactions</h3>
+              <p className="text-sm text-content-muted font-mono mt-0.5">•••• {cardLastFour}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="p-2 text-content-muted hover:text-content hover:bg-white/10 rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[60vh]">
+        <div className="p-6 overflow-y-auto max-h-[60vh] bg-surface">
           {isLoading ? (
-            <p className="text-gray-500 text-center py-8">Loading transactions...</p>
+            <div className="py-12 flex justify-center animate-pulse-slow">
+              <div className="w-10 h-10 rounded-full border-4 border-accent border-t-transparent animate-spin"></div>
+            </div>
           ) : transactions.length === 0 ? (
-            <div className="text-center py-8">
-              <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No transactions on this card yet</p>
+            <div className="text-center py-12">
+              <div className="w-20 h-20 bg-surface-highlight rounded-full flex items-center justify-center mx-auto mb-6">
+                <Receipt className="w-10 h-10 text-content-subtle" />
+              </div>
+              <p className="text-content-muted text-lg font-medium">No transactions on this card yet</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {transactions.map((tx: any) => (
+            <div className="space-y-4">
+              {transactions.map((tx: any, index: number) => (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                  className="flex items-center justify-between p-5 bg-surface-highlight/50 hover:bg-surface-highlight border border-white/5 rounded-xl transition-all animate-slide-up"
+                  style={{ animationDelay: `${index * 0.03}s` }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-bank-100 rounded-lg flex items-center justify-center">
-                      <Receipt className="w-5 h-5 text-bank-600" />
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center border border-accent/10">
+                      <Receipt className="w-5 h-5 text-accent-light" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">
+                      <p className="font-semibold text-content text-lg">
                         {tx.merchantName || 'Unknown merchant'}
                       </p>
-                      <p className="text-sm text-gray-500">
-                        {new Date(tx.createdAt).toLocaleDateString()} at {new Date(tx.createdAt).toLocaleTimeString()}
+                      <p className="text-sm text-content-muted font-mono mt-1">
+                        {new Date(tx.createdAt).toLocaleDateString()} at {new Date(tx.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </p>
                       {tx.merchantCategory && (
-                        <p className="text-xs text-gray-400">{tx.merchantCategory}</p>
+                        <p className="text-xs text-accent-light/70 mt-1 uppercase tracking-wider font-semibold">{tx.merchantCategory}</p>
                       )}
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-gray-900">
+                    <p className="font-display font-bold text-xl text-content mb-2">
                       -${parseFloat(tx.amount).toFixed(2)}
                     </p>
                     <Badge

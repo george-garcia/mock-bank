@@ -22,17 +22,17 @@ export function Sidebar() {
   const logout = useAuthStore((s) => s.logout);
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 min-h-screen flex flex-col">
+    <aside className="w-64 bg-surface/40 backdrop-blur-xl border-r border-white/5 min-h-screen flex flex-col relative z-20">
       <div className="p-6">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-bank-600 rounded-lg flex items-center justify-center">
+        <Link to="/" className="flex items-center gap-3 group">
+          <div className="w-10 h-10 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.5)] group-hover:shadow-[0_0_25px_rgba(139,92,246,0.6)] transition-all">
             <Wallet className="w-5 h-5 text-white" />
           </div>
-          <span className="text-xl font-bold text-gray-900">Mock Bank</span>
+          <span className="text-xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-content-muted">Mock Bank</span>
         </Link>
       </div>
 
-      <nav className="flex-1 px-4 space-y-1">
+      <nav className="flex-1 px-4 py-4 space-y-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.to;
@@ -40,23 +40,23 @@ export function Sidebar() {
             <Link
               key={item.to}
               to={item.to}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                 isActive
-                  ? 'bg-bank-50 text-bank-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  ? 'bg-primary/10 text-primary-light border border-primary/20 shadow-[inset_0_0_20px_rgba(59,130,246,0.05)]'
+                  : 'text-content-muted hover:bg-white/5 hover:text-content border border-transparent'
               }`}
             >
-              <Icon className="w-5 h-5" />
+              <Icon className={`w-5 h-5 ${isActive ? 'text-primary-light drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]' : ''}`} />
               {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-gray-200">
+      <div className="p-4 border-t border-white/5 mb-4 mx-4">
         <button
           onClick={logout}
-          className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-sm font-medium text-content-muted hover:bg-danger/10 hover:text-danger-light hover:border-danger/20 border border-transparent transition-all duration-200"
         >
           <LogOut className="w-5 h-5" />
           Sign out

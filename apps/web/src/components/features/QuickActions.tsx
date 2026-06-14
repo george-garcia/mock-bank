@@ -10,9 +10,9 @@ export function QuickActions() {
   const [activeAction, setActiveAction] = useState<ActionType>(null);
 
   const actions = [
-    { id: 'deposit' as ActionType, label: 'Deposit', icon: ArrowDownLeft, color: 'text-success-600 bg-success-50 hover:bg-success-100' },
-    { id: 'withdraw' as ActionType, label: 'Withdraw', icon: ArrowUpRight, color: 'text-danger-600 bg-danger-50 hover:bg-danger-100' },
-    { id: 'transfer' as ActionType, label: 'Transfer', icon: ArrowLeftRight, color: 'text-bank-600 bg-bank-50 hover:bg-bank-100' },
+    { id: 'deposit' as ActionType, label: 'Deposit', icon: ArrowDownLeft, color: 'text-success-light bg-success/10 hover:bg-success/20 border border-success/20' },
+    { id: 'withdraw' as ActionType, label: 'Withdraw', icon: ArrowUpRight, color: 'text-danger-light bg-danger/10 hover:bg-danger/20 border border-danger/20' },
+    { id: 'transfer' as ActionType, label: 'Transfer', icon: ArrowLeftRight, color: 'text-primary-light bg-primary/10 hover:bg-primary/20 border border-primary/20' },
   ];
 
   return (
@@ -24,26 +24,26 @@ export function QuickActions() {
             <button
               key={action.id}
               onClick={() => setActiveAction(activeAction === action.id ? null : action.id)}
-              className={`flex flex-col items-center gap-2 p-4 rounded-xl transition-colors ${
+              className={`flex flex-col items-center gap-3 p-4 rounded-xl transition-all duration-200 ${
                 activeAction === action.id
-                  ? 'ring-2 ring-bank-500 bg-bank-50'
+                  ? 'ring-2 ring-primary bg-surface-highlight border-transparent'
                   : action.color
               }`}
             >
               <Icon className="w-6 h-6" />
-              <span className="text-sm font-medium">{action.label}</span>
+              <span className="text-sm font-semibold tracking-wide uppercase">{action.label}</span>
             </button>
           );
         })}
       </div>
 
       {activeAction && (
-        <div className="relative">
+        <div className="relative animate-fade-in mt-6">
           <button
             onClick={() => setActiveAction(null)}
-            className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+            className="absolute top-4 right-4 p-2 text-content-muted hover:text-content rounded-lg hover:bg-white/10 z-10 transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
           {activeAction === 'deposit' && <DepositForm />}
           {activeAction === 'withdraw' && <WithdrawalForm />}

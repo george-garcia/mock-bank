@@ -1,14 +1,12 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { TransactionsRepository } from './transactions.repository';
 import { AccountsService } from '../accounts/accounts.service';
-import { AccountsRepository } from '../accounts/accounts.repository';
 import { NewTransaction } from '@mock-bank/database';
 
 @Injectable()
 export class TransactionsService {
   constructor(
     private transactionsRepository: TransactionsRepository,
-    private accountsRepository: AccountsRepository,
     private accountsService: AccountsService,
   ) {}
 
@@ -22,7 +20,10 @@ export class TransactionsService {
     });
 
     // Update account balance
-    const amount = data.type === 'withdrawal' ? `-${data.amount}` : data.amount;
+    let amount = data.amount;
+    if (data.type === 'withdrawal' || (data.type === 'transfer' && data.metadata && JSON.parse(data.metadata).transferType === 'outgoing')) {
+      amount = `-${data.amount}`;
+    }
     await this.accountsService.updateBalance(data.accountId, userId, amount);
 
     return transaction;
@@ -35,16 +36,9 @@ export class TransactionsService {
       status: 'completed',
     });
 
-    // Update account balance directly via repository
-    const account = await this.accountsRepository.findById(data.accountId);
-    if (account) {
-      const currentBalance = parseFloat(account.balance);
-      const changeAmount = parseFloat(data.amount);
-      const newBalance = data.type === 'withdrawal'
-        ? (currentBalance - changeAmount).toFixed(2)
-        : (currentBalance + changeAmount).toFixed(2);
-      await this.accountsRepository.updateBalance(data.accountId, newBalance);
-    }
+    // Update account balance through the accounts service (single source of balance math)
+    const signedAmount = data.type === 'withdrawal' ? `-${data.amount}` : data.amount;
+    await this.accountsService.adjustBalance(data.accountId, signedAmount);
 
     return transaction;
   }

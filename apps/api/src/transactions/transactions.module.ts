@@ -8,6 +8,6 @@ import { AccountsModule } from '../accounts/accounts.module';
   imports: [AccountsModule],
   providers: [TransactionsService, TransactionsRepository],
   controllers: [TransactionsController],
-  exports: [TransactionsService, TransactionsRepository],
+  exports: [TransactionsService],
 })
 export class TransactionsModule {}

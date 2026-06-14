@@ -18,7 +18,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload): Promise<JwtPayload> {
+  async validate(payload: JwtPayload & { typ?: string }): Promise<JwtPayload> {
+    // Reject intermediate 2FA challenge tokens — they must not grant session access.
+    if (payload.typ) {
+      throw new UnauthorizedException('Invalid token');
+    }
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException('User not found');

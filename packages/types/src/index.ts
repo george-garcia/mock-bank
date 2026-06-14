@@ -17,17 +17,3 @@ export interface LithicWebhookEvent {
   token: string;
   payload: Record<string, unknown>;
 }
-
-// Re-export database types
-export type {
-  User,
-  NewUser,
-  Account,
-  NewAccount,
-  Transaction,
-  NewTransaction,
-  Card,
-  NewCard,
-  CardTransaction,
-  NewCardTransaction,
-} from '@mock-bank/database';

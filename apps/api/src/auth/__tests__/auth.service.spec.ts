@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth.service';
 import { UsersService } from '../../users/users.service';
+import { TwoFactorService } from '../../two-factor/two-factor.service';
 import * as bcryptjs from 'bcryptjs';
 
 jest.mock('bcryptjs');
@@ -12,6 +13,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let usersService: UsersService;
   let jwtService: JwtService;
+  let twoFactorService: TwoFactorService;
 
   const mockUser = {
     id: 1,
@@ -19,6 +21,8 @@ describe('AuthService', () => {
     firstName: 'John',
     lastName: 'Doe',
     passwordHash: 'hashedpassword',
+    twoFactorMethod: 'none' as const,
+    totpSecret: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -37,12 +41,20 @@ describe('AuthService', () => {
       get: jest.fn().mockReturnValue('test-secret'),
     };
 
+    const mockTwoFactorService = {
+      issueLoginChallenge: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         {
           provide: UsersService,
           useValue: mockUsersService,
+        },
+        {
+          provide: TwoFactorService,
+          useValue: mockTwoFactorService,
         },
         {
           provide: JwtService,
@@ -58,6 +70,7 @@ describe('AuthService', () => {
     service = module.get<AuthService>(AuthService);
     usersService = module.get(UsersService);
     jwtService = module.get(JwtService);
+    twoFactorService = module.get(TwoFactorService);
   });
 
   describe('register', () => {
@@ -112,7 +125,33 @@ describe('AuthService', () => {
 
       expect(usersService.findByEmail).toHaveBeenCalledWith('test@example.com');
       expect(bcryptjs.compare).toHaveBeenCalledWith('password123', 'hashedpassword');
-      expect(result.token).toBe('mock-jwt-token');
+      expect(result).toHaveProperty('token', 'mock-jwt-token');
+      expect(twoFactorService.issueLoginChallenge).not.toHaveBeenCalled();
+    });
+
+    it('should return a 2FA challenge instead of a token when 2FA is enabled', async () => {
+      jest
+        .spyOn(usersService, 'findByEmail')
+        .mockResolvedValue({ ...mockUser, twoFactorMethod: 'totp' });
+      (bcryptjs.compare as jest.Mock).mockResolvedValue(true);
+      jest.spyOn(twoFactorService, 'issueLoginChallenge').mockResolvedValue({
+        requiresTwoFactor: true,
+        method: 'totp',
+        challengeToken: 'challenge-token',
+      });
+
+      const result = await service.login({
+        email: 'test@example.com',
+        password: 'password123',
+      });
+
+      expect(twoFactorService.issueLoginChallenge).toHaveBeenCalled();
+      expect(result).toEqual({
+        requiresTwoFactor: true,
+        method: 'totp',
+        challengeToken: 'challenge-token',
+      });
+      expect(result).not.toHaveProperty('token');
     });
 
     it('should throw UnauthorizedException if user not found', async () => {

@@ -23,11 +23,6 @@ export class CardsRepository {
     return db.select().from(cards).where(eq(cards.accountId, accountId)).orderBy(desc(cards.createdAt));
   }
 
-  async findByUserId(userId: number) {
-    // Note: This is called from service which filters by user's accounts
-    return db.select().from(cards).orderBy(desc(cards.createdAt));
-  }
-
   async updateStatus(id: number, status: 'active' | 'frozen' | 'cancelled') {
     const [card] = await db
       .update(cards)

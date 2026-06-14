@@ -9,6 +9,6 @@ import { AccountsModule } from '../accounts/accounts.module';
   imports: [LithicModule, AccountsModule],
   providers: [CardsService, CardsRepository],
   controllers: [CardsController],
-  exports: [CardsService, CardsRepository],
+  exports: [CardsService],
 })
 export class CardsModule {}

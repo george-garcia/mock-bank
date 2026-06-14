@@ -3,12 +3,14 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
+import { EmailModule } from './email/email.module';
+import { TwoFactorModule } from './two-factor/two-factor.module';
 import { UsersModule } from './users/users.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { CardsModule } from './cards/cards.module';
 import { LithicModule } from './lithic/lithic.module';
-import { LithicWebhookController } from './lithic/lithic.webhook.controller';
+import { LithicWebhookModule } from './lithic/lithic-webhook.module';
 import { DepositsModule } from './deposits/deposits.module';
 import { WithdrawalsModule } from './withdrawals/withdrawals.module';
 import { TransfersModule } from './transfers/transfers.module';
@@ -24,17 +26,20 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger.midd
       ttl: 60000,
       limit: 100,
     }]),
+    EmailModule,
     AuthModule,
+    TwoFactorModule,
     UsersModule,
     AccountsModule,
     TransactionsModule,
     CardsModule,
     LithicModule,
+    LithicWebhookModule,
     DepositsModule,
     WithdrawalsModule,
     TransfersModule,
   ],
-  controllers: [LithicWebhookController],
+  controllers: [],
   providers: [
     {
       provide: APP_GUARD,

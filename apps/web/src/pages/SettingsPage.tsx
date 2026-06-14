@@ -1,33 +1,34 @@
 import { useAuthStore } from '../stores/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { User, Mail, Shield } from 'lucide-react';
+import { TwoFactorSettings } from '../components/features/TwoFactorSettings';
+import { User, Mail } from 'lucide-react';
 
 export function SettingsPage() {
   const user = useAuthStore((s) => s.user);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fade-in">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
-        <p className="text-gray-500">Manage your account and preferences</p>
+        <h2 className="text-3xl font-display font-bold text-content tracking-tight">Settings</h2>
+        <p className="text-content-muted mt-1">Manage your account and preferences</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
+        <Card className="animate-slide-up">
           <CardHeader>
             <CardTitle>Profile Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-bank-100 rounded-full flex items-center justify-center">
-                <User className="w-8 h-8 text-bank-600" />
+            <div className="flex items-center gap-6">
+              <div className="w-20 h-20 bg-primary/10 border border-primary/20 rounded-full flex items-center justify-center">
+                <User className="w-10 h-10 text-primary-light" />
               </div>
               <div>
-                <p className="font-medium text-gray-900">
+                <p className="font-display font-semibold text-xl text-content">
                   {user?.firstName} {user?.lastName}
                 </p>
-                <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-                  <Mail className="w-4 h-4" />
+                <div className="flex items-center gap-2 text-sm text-content-muted mt-2">
+                  <Mail className="w-4 h-4 text-primary-light/50" />
                   {user?.email}
                 </div>
               </div>
@@ -35,20 +36,12 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
           <CardHeader>
             <CardTitle>Security</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-success-100 rounded-lg flex items-center justify-center">
-                <Shield className="w-5 h-5 text-success-600" />
-              </div>
-              <div>
-                <p className="font-medium text-gray-900">Two-Factor Authentication</p>
-                <p className="text-sm text-gray-500">Not enabled (mock)</p>
-              </div>
-            </div>
+            <TwoFactorSettings />
           </CardContent>
         </Card>
       </div>

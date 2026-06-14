@@ -18,11 +18,7 @@ export class AccountsController {
     @CurrentUser('sub') userId: number,
     @Body() dto: CreateAccountDto,
   ) {
-    return this.accountsService.create(userId, {
-      type: dto.type,
-      balance: '0.00',
-      status: 'active',
-    });
+    return this.accountsService.create(userId, { type: dto.type });
   }
 
   @Get()

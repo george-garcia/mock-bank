@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CardsRepository } from './cards.repository';
-import { AccountsRepository } from '../accounts/accounts.repository';
 import { LithicService } from '../lithic/lithic.service';
 import { AccountsService } from '../accounts/accounts.service';
 import { NewCard, NewCardTransaction } from '@mock-bank/database';
@@ -9,7 +8,6 @@ import { NewCard, NewCardTransaction } from '@mock-bank/database';
 export class CardsService {
   constructor(
     private cardsRepository: CardsRepository,
-    private accountsRepository: AccountsRepository,
     private lithicService: LithicService,
     private accountsService: AccountsService,
   ) {}
@@ -75,9 +73,7 @@ export class CardsService {
   async getAccountForCard(cardId: number) {
     const card = await this.cardsRepository.findById(cardId);
     if (!card) throw new NotFoundException('Card not found');
-    const account = await this.accountsRepository.findById(card.accountId);
-    if (!account) throw new NotFoundException('Account not found');
-    return account;
+    return this.accountsService.findByIdInternal(card.accountId);
   }
 
   async freezeCard(id: number, userId: number) {

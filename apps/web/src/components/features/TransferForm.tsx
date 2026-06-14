@@ -1,6 +1,4 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { transfersApi, accountsApi } from '../../lib/api';
+import { useTransfer } from '../../hooks/useTransfer';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
@@ -8,126 +6,100 @@ import { Badge } from '../ui/Badge';
 import { ArrowLeftRight, AlertCircle, CheckCircle } from 'lucide-react';
 
 export function TransferForm() {
-  const queryClient = useQueryClient();
-  const [form, setForm] = useState({
-    fromAccountId: '',
-    toAccountId: '',
-    amount: '',
-    description: '',
-  });
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState('');
-
-  const { data: accountsData } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => accountsApi.list(),
-  });
-
-  const transferMutation = useMutation({
-    mutationFn: transfersApi.create,
-    onSuccess: (response) => {
-      setResult(response.data.data);
-      setError('');
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      setForm({ fromAccountId: '', toAccountId: '', amount: '', description: '' });
-    },
-    onError: (err: any) => {
-      setError(err.response?.data?.message || 'Transfer failed');
-      setResult(null);
-    },
-  });
-
-  const accounts = accountsData?.data?.data || [];
-
-  const fromAccount = accounts.find((a: any) => a.id.toString() === form.fromAccountId);
-  const availableBalance = fromAccount ? parseFloat(fromAccount.balance) : 0;
-  const transferAmount = parseFloat(form.amount || '0');
-  const hasInsufficientFunds = transferAmount > availableBalance;
-  const sameAccount = form.fromAccountId && form.fromAccountId === form.toAccountId;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.fromAccountId || !form.toAccountId || !form.amount || hasInsufficientFunds || sameAccount) return;
-    setError('');
-    transferMutation.mutate({
-      fromAccountId: parseInt(form.fromAccountId),
-      toAccountId: parseInt(form.toAccountId),
-      amount: form.amount,
-      description: form.description || undefined,
-    });
-  };
-
-  const filteredToAccounts = accounts.filter((a: any) => a.id.toString() !== form.fromAccountId);
+  const {
+    accounts,
+    filteredToAccounts,
+    form,
+    setForm,
+    result,
+    error,
+    availableBalance,
+    hasInsufficientFunds,
+    sameAccount,
+    handleSubmit,
+    isSubmitting,
+  } = useTransfer();
 
   return (
-    <Card>
+    <Card className="border-primary/20 shadow-[0_0_30px_rgba(59,130,246,0.1)]">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ArrowLeftRight className="w-5 h-5 text-bank-600" />
+        <CardTitle className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20">
+            <ArrowLeftRight className="w-4 h-4 text-primary-light" />
+          </div>
           Transfer Between Accounts
         </CardTitle>
       </CardHeader>
       <CardContent>
         {result && (
-          <div className="mb-4 p-4 bg-success-50 border border-success-200 rounded-lg">
+          <div className="mb-6 p-4 bg-success/10 border border-success/20 rounded-xl">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="w-5 h-5 text-success-600" />
-              <span className="font-medium text-success-800">Transfer completed!</span>
+              <CheckCircle className="w-5 h-5 text-success-light" />
+              <span className="font-semibold text-success-light">Transfer completed!</span>
             </div>
-            <p className="text-sm text-success-700">
-              ${parseFloat(result.amount).toFixed(2)} transferred successfully
+            <p className="text-sm text-content-muted">
+              {result.message}
             </p>
-            <div className="flex gap-2 mt-2">
-              <Badge variant="success">From: {result.fromAccount?.label || `Account #${result.fromAccountId}`}</Badge>
-              <Badge variant="info">To: {result.toAccount?.label || `Account #${result.toAccountId}`}</Badge>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <Badge variant="success">From Account #{result.fromTransaction?.accountId}</Badge>
+              <Badge variant="info">To Account #{result.toTransaction?.accountId}</Badge>
             </div>
           </div>
         )}
 
         {error && (
-          <div className="mb-4 p-4 bg-danger-50 border border-danger-200 rounded-lg flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 text-danger-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-danger-700">{error}</p>
+          <div className="mb-6 p-4 bg-danger/10 border border-danger/20 rounded-xl flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-danger-light flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-danger-light">{error}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="label">From Account</label>
-            <select
-              className="input"
-              value={form.fromAccountId}
-              onChange={(e) => setForm({ ...form, fromAccountId: e.target.value, toAccountId: '' })}
-              required
-            >
-              <option value="">Select source account</option>
-              {accounts.map((account: any) => (
-                <option key={account.id} value={account.id}>
-                  {account.label || `${account.type} #${account.id}`} — ${parseFloat(account.balance).toFixed(2)}
-                </option>
-              ))}
-            </select>
+            <label className="label-modern">From Account</label>
+            <div className="relative">
+              <select
+                className="input-glass appearance-none cursor-pointer"
+                value={form.fromAccountId}
+                onChange={(e) => setForm({ ...form, fromAccountId: e.target.value, toAccountId: '' })}
+                required
+              >
+                <option value="" className="bg-surface text-content">Select source account</option>
+                {accounts.map((account: any) => (
+                  <option key={account.id} value={account.id} className="bg-surface text-content">
+                    {account.label || `${account.type} #${account.id}`} — ${parseFloat(account.balance).toFixed(2)}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-content-muted">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </div>
           </div>
 
           <div>
-            <label className="label">To Account</label>
-            <select
-              className="input"
-              value={form.toAccountId}
-              onChange={(e) => setForm({ ...form, toAccountId: e.target.value })}
-              required
-              disabled={!form.fromAccountId}
-            >
-              <option value="">Select destination account</option>
-              {filteredToAccounts.map((account: any) => (
-                <option key={account.id} value={account.id}>
-                  {account.label || `${account.type} #${account.id}`} — ${parseFloat(account.balance).toFixed(2)}
-                </option>
-              ))}
-            </select>
+            <label className="label-modern">To Account</label>
+            <div className="relative">
+              <select
+                className="input-glass appearance-none cursor-pointer disabled:opacity-50"
+                value={form.toAccountId}
+                onChange={(e) => setForm({ ...form, toAccountId: e.target.value })}
+                required
+                disabled={!form.fromAccountId}
+              >
+                <option value="" className="bg-surface text-content">Select destination account</option>
+                {filteredToAccounts.map((account: any) => (
+                  <option key={account.id} value={account.id} className="bg-surface text-content">
+                    {account.label || `${account.type} #${account.id}`} — ${parseFloat(account.balance).toFixed(2)}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-content-muted">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </div>
             {sameAccount && (
-              <p className="text-xs text-danger-600 mt-1">Cannot transfer to the same account</p>
+              <p className="text-xs text-danger-light mt-2">Cannot transfer to the same account</p>
             )}
           </div>
 
@@ -136,7 +108,7 @@ export function TransferForm() {
             type="number"
             step="0.01"
             min="0.01"
-            placeholder="100.00"
+            placeholder="e.g. 100.00"
             value={form.amount}
             onChange={(e) => setForm({ ...form, amount: e.target.value })}
             error={hasInsufficientFunds ? `Amount exceeds available balance ($${availableBalance.toFixed(2)})` : undefined}
@@ -152,8 +124,8 @@ export function TransferForm() {
 
           <Button
             type="submit"
-            className="w-full"
-            isLoading={transferMutation.isPending}
+            className="w-full bg-primary hover:bg-primary-dark hover:shadow-[0_0_15px_rgba(59,130,246,0.4)] border-primary-light/30"
+            isLoading={isSubmitting}
             disabled={hasInsufficientFunds || !!sameAccount}
           >
             <ArrowLeftRight className="w-4 h-4 mr-2" />

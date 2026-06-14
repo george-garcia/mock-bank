@@ -8,6 +8,8 @@ export const transactionTypeEnum = pgEnum('transaction_type', ['deposit', 'withd
 export const transactionStatusEnum = pgEnum('transaction_status', ['pending', 'completed', 'failed', 'reversed']);
 export const cardStatusEnum = pgEnum('card_status', ['active', 'frozen', 'cancelled']);
 export const cardTransactionStatusEnum = pgEnum('card_transaction_status', ['authorized', 'declined', 'settled', 'voided']);
+export const twoFactorMethodEnum = pgEnum('two_factor_method', ['none', 'email', 'totp']);
+export const otpPurposeEnum = pgEnum('otp_purpose', ['login', 'enable']);
 
 // Users table
 export const users = pgTable('users', {
@@ -16,8 +18,22 @@ export const users = pgTable('users', {
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   firstName: varchar('first_name', { length: 100 }).notNull(),
   lastName: varchar('last_name', { length: 100 }).notNull(),
+  twoFactorMethod: twoFactorMethodEnum('two_factor_method').notNull().default('none'),
+  totpSecret: varchar('totp_secret', { length: 255 }), // base32 secret, only active once twoFactorMethod = 'totp'
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// OTP codes table (email one-time codes for login challenge and enabling email 2FA)
+export const otpCodes = pgTable('otp_codes', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  codeHash: varchar('code_hash', { length: 255 }).notNull(), // bcrypt hash — never store plaintext
+  purpose: otpPurposeEnum('purpose').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  attempts: integer('attempts').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // Accounts table
@@ -83,6 +99,14 @@ export const cardTransactions = pgTable('card_transactions', {
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
+  otpCodes: many(otpCodes),
+}));
+
+export const otpCodesRelations = relations(otpCodes, ({ one }) => ({
+  user: one(users, {
+    fields: [otpCodes.userId],
+    references: [users.id],
+  }),
 }));
 
 export const accountsRelations = relations(accounts, ({ one, many }) => ({
@@ -131,3 +155,5 @@ export type Card = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
 export type CardTransaction = typeof cardTransactions.$inferSelect;
 export type NewCardTransaction = typeof cardTransactions.$inferInsert;
+export type OtpCode = typeof otpCodes.$inferSelect;
+export type NewOtpCode = typeof otpCodes.$inferInsert;

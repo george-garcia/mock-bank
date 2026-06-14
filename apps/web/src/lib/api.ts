@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 
 // @ts-ignore
 const API_BASE_URL = import.meta.env?.VITE_API_URL || 'http://localhost:3000/api';
@@ -31,55 +31,74 @@ api.interceptors.response.use(
   }
 );
 
+// Every endpoint wraps its result in { success, data }. Unwrap it here so callers
+// (hooks/components) only ever deal with the payload, never the transport envelope.
+async function unwrap<T = any>(request: Promise<AxiosResponse<{ data: T }>>): Promise<T> {
+  const response = await request;
+  return response.data.data;
+}
+
 // Auth API
 export const authApi = {
   register: (data: { email: string; password: string; firstName: string; lastName: string }) =>
-    api.post('/auth/register', data),
+    unwrap(api.post('/auth/register', data)),
   login: (data: { email: string; password: string }) =>
-    api.post('/auth/login', data),
-  profile: () => api.get('/users/profile'),
+    unwrap(api.post('/auth/login', data)),
+  profile: () => unwrap(api.get('/users/profile')),
+};
+
+// Two-Factor Auth API
+export const twoFactorApi = {
+  status: () => unwrap(api.get('/auth/2fa/status')),
+  totpSetup: () => unwrap(api.post('/auth/2fa/totp/setup')),
+  totpEnable: (code: string) => unwrap(api.post('/auth/2fa/totp/enable', { code })),
+  emailSetup: () => unwrap(api.post('/auth/2fa/email/setup')),
+  emailEnable: (code: string) => unwrap(api.post('/auth/2fa/email/enable', { code })),
+  disable: (code: string) => unwrap(api.post('/auth/2fa/disable', { code })),
+  verifyLogin: (data: { challengeToken: string; code: string }) =>
+    unwrap(api.post('/auth/2fa/verify-login', data)),
 };
 
 // Accounts API
 export const accountsApi = {
-  list: () => api.get('/accounts'),
+  list: () => unwrap(api.get('/accounts')),
   create: (data: { type: 'checking' | 'savings'; label?: string }) =>
-    api.post('/accounts', data),
-  get: (id: number) => api.get(`/accounts/${id}`),
+    unwrap(api.post('/accounts', data)),
+  get: (id: number) => unwrap(api.get(`/accounts/${id}`)),
 };
 
 // Transactions API
 export const transactionsApi = {
-  list: (accountId: number) => api.get(`/transactions/account/${accountId}`),
+  list: (accountId: number) => unwrap(api.get(`/transactions/account/${accountId}`)),
   create: (data: { accountId: number; type: string; amount: string; description?: string }) =>
-    api.post('/transactions', data),
+    unwrap(api.post('/transactions', data)),
 };
 
 // Cards API
 export const cardsApi = {
-  list: () => api.get('/cards'),
+  list: () => unwrap(api.get('/cards')),
   create: (data: { accountId: number; spendLimit?: string; spendLimitPeriod?: string; memo?: string }) =>
-    api.post('/cards', data),
-  freeze: (id: number) => api.patch(`/cards/${id}/freeze`),
-  unfreeze: (id: number) => api.patch(`/cards/${id}/unfreeze`),
-  cancel: (id: number) => api.patch(`/cards/${id}/cancel`),
-  transactions: (id: number) => api.get(`/cards/${id}/transactions`),
+    unwrap(api.post('/cards', data)),
+  freeze: (id: number) => unwrap(api.patch(`/cards/${id}/freeze`)),
+  unfreeze: (id: number) => unwrap(api.patch(`/cards/${id}/unfreeze`)),
+  cancel: (id: number) => unwrap(api.patch(`/cards/${id}/cancel`)),
+  transactions: (id: number) => unwrap(api.get(`/cards/${id}/transactions`)),
 };
 
 // Deposits API
 export const depositsApi = {
   simulate: (data: { accountId: number; amount: string; description?: string; instant?: boolean }) =>
-    api.post('/deposits/simulate', data),
+    unwrap(api.post('/deposits/simulate', data)),
 };
 
 // Withdrawals API
 export const withdrawalsApi = {
   create: (data: { accountId: number; amount: string; description?: string }) =>
-    api.post('/withdrawals', data),
+    unwrap(api.post('/withdrawals', data)),
 };
 
 // Transfers API
 export const transfersApi = {
   create: (data: { fromAccountId: number; toAccountId: number; amount: string; description?: string }) =>
-    api.post('/transfers', data),
+    unwrap(api.post('/transfers', data)),
 };

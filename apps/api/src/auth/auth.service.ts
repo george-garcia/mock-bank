@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcryptjs from 'bcryptjs';
 import { UsersService } from '../users/users.service';
+import { TwoFactorService } from '../two-factor/two-factor.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
@@ -10,6 +11,7 @@ import { LoginDto } from './dto/login.dto';
 export class AuthService {
   constructor(
     private usersService: UsersService,
+    private twoFactorService: TwoFactorService,
     private jwtService: JwtService,
     private configService: ConfigService,
   ) {}
@@ -48,6 +50,11 @@ export class AuthService {
     const isValid = await bcryptjs.compare(dto.password, user.passwordHash);
     if (!isValid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // When 2FA is enabled, withhold the session token and issue a challenge instead.
+    if (user.twoFactorMethod !== 'none') {
+      return this.twoFactorService.issueLoginChallenge(user);
     }
 
     const token = this.generateToken(user.id, user.email);

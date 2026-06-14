@@ -14,11 +14,6 @@ export class UsersController {
   @Get('profile')
   @ApiOperation({ summary: 'Get current user profile' })
   async getProfile(@CurrentUser('sub') userId: number) {
-    const user = await this.usersService.findById(userId);
-    if (!user) {
-      return null;
-    }
-    const { passwordHash, ...profile } = user;
-    return profile;
+    return this.usersService.getProfile(userId);
   }
 }

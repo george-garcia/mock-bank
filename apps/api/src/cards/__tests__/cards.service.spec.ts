@@ -3,7 +3,6 @@ import { CardsService } from '../cards.service';
 import { CardsRepository } from '../cards.repository';
 import { AccountsService } from '../../accounts/accounts.service';
 import { LithicService } from '../../lithic/lithic.service';
-import { AccountsRepository } from '../../accounts/accounts.repository';
 import { NotFoundException } from '@nestjs/common';
 
 describe('CardsService', () => {
@@ -38,13 +37,10 @@ describe('CardsService', () => {
     updateCardTransactionStatus: jest.fn(),
   };
 
-  const mockAccountsRepo = {
-    findById: jest.fn(),
-  };
-
   const mockAccountsService = {
     findOne: jest.fn(),
     findAllByUser: jest.fn(),
+    findByIdInternal: jest.fn(),
     updateBalance: jest.fn(),
   };
 
@@ -59,7 +55,6 @@ describe('CardsService', () => {
       providers: [
         CardsService,
         { provide: CardsRepository, useValue: mockCardsRepo },
-        { provide: AccountsRepository, useValue: mockAccountsRepo },
         { provide: AccountsService, useValue: mockAccountsService },
         { provide: LithicService, useValue: mockLithicService },
       ],

@@ -41,15 +41,16 @@ describe('AccountsService', () => {
   });
 
   describe('create', () => {
-    it('should create an account with userId', async () => {
-      const createData = { type: 'checking' as const, name: 'Checking Account' };
+    it('should create an account with userId and default balance/status', async () => {
       jest.spyOn(repository, 'create').mockResolvedValue(mockAccount);
 
-      const result = await service.create(1, createData);
+      const result = await service.create(1, { type: 'checking' });
 
       expect(repository.create).toHaveBeenCalledWith({
-        ...createData,
         userId: 1,
+        type: 'checking',
+        balance: '0.00',
+        status: 'active',
       });
       expect(result).toEqual(mockAccount);
     });

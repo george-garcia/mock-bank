@@ -11,23 +11,21 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="label-modern">
             {label}
           </label>
         )}
         <input
           ref={ref}
           className={cn(
-            'w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-bank-500 focus:border-transparent transition-colors',
-            error
-              ? 'border-danger-300 focus:ring-danger-500'
-              : 'border-gray-300',
+            'input-glass',
+            error && 'border-danger/50 focus:ring-danger/50 focus:border-danger/50 bg-danger/5',
             className
           )}
           {...props}
         />
         {error && (
-          <p className="mt-1 text-sm text-danger-600">{error}</p>
+          <p className="mt-1.5 text-xs text-danger-light">{error}</p>
         )}
       </div>
     );

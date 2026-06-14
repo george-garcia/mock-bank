@@ -7,30 +7,116 @@
     font-family: 'Inter', system-ui, sans-serif;
   }
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    background-color: #09090b;
+    color: #ffffff;
+    @apply antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  
+  ::selection {
+    background-color: #3b82f6; /* primary */
+    color: #ffffff;
+  }
+  
+  /* Adding a subtle ambient glow to the body */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08), transparent 25%);
+    pointer-events: none;
+    z-index: -1;
   }
 }
 
 @layer components {
+  /* Premium Glassmorphism Card */
+  .card-glass {
+    background-color: rgba(24, 24, 27, 0.8); /* surface/80 */
+    @apply backdrop-blur-xl border border-white/10 shadow-xl shadow-black/20 rounded-2xl p-6 transition-all duration-300;
+  }
+  .card-glass:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2), 0 0 20px rgba(59, 130, 246, 0.1);
+  }
+
+  /* Futuristic Buttons */
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95;
+    /* We handle focus ring offset background manually to avoid bg-background error */
   }
+  .btn:focus {
+    --tw-ring-offset-color: #09090b;
+  }
+  
   .btn-primary {
-    @apply btn bg-bank-600 text-white hover:bg-bank-700 focus:ring-bank-500;
+    @apply text-white;
+    background-color: #3b82f6;
+    border: 1px solid rgba(96, 165, 250, 0.3); /* primary-light/30 */
   }
+  .btn-primary:hover {
+    background-color: #2563eb; /* primary-dark */
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+  }
+  .btn-primary:focus {
+    --tw-ring-color: #3b82f6;
+  }
+  
   .btn-secondary {
-    @apply btn bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-gray-500;
+    @apply border border-white/10;
+    color: #ffffff; /* text-content */
+    background-color: #27272a; /* surface-highlight */
   }
+  .btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.1); /* white/10 */
+    color: #ffffff;
+  }
+  .btn-secondary:focus {
+    --tw-ring-color: #a1a1aa; /* content-muted */
+  }
+  
   .btn-danger {
-    @apply btn bg-danger-600 text-white hover:bg-danger-700 focus:ring-danger-500;
+    background-color: rgba(239, 68, 68, 0.1); /* danger/10 */
+    color: #ef4444; /* danger */
+    border: 1px solid rgba(239, 68, 68, 0.2); /* danger/20 */
   }
-  .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+  .btn-danger:hover {
+    background-color: rgba(239, 68, 68, 0.2); /* danger/20 */
+    color: #f87171; /* danger-light */
   }
-  .input {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-bank-500 focus:border-transparent transition-colors;
+  .btn-danger:focus {
+    --tw-ring-color: #ef4444; /* danger */
   }
-  .label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
+
+  /* Inputs */
+  .input-glass {
+    @apply w-full px-4 py-3 border border-white/10 rounded-xl focus:outline-none transition-all backdrop-blur-md;
+    background-color: rgba(0, 0, 0, 0.4); /* black/40 */
+    color: #ffffff; /* text-content */
+  }
+  .input-glass::placeholder {
+    color: #71717a; /* content-subtle */
+  }
+  .input-glass:focus {
+    --tw-ring-color: rgba(59, 130, 246, 0.5); /* primary/50 */
+    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+  }
+  
+  .label-modern {
+    @apply block text-xs font-semibold uppercase tracking-wider mb-2;
+    color: #a1a1aa; /* content-muted */
+  }
+
+  /* Typography Utilities */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r;
+    --tw-gradient-from: #60a5fa var(--tw-gradient-from-position);
+    --tw-gradient-to: rgba(96, 165, 250, 0) var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-from), #a78bfa var(--tw-gradient-to-position); /* to accent-light */
   }
 }

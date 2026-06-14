@@ -1,15 +1,16 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AccountsRepository } from './accounts.repository';
-import { NewAccount } from '@mock-bank/database';
 
 @Injectable()
 export class AccountsService {
   constructor(private accountsRepository: AccountsRepository) {}
 
-  async create(userId: number, data: Omit<NewAccount, 'userId'>) {
+  async create(userId: number, data: { type: 'checking' | 'savings' }) {
     return this.accountsRepository.create({
-      ...data,
       userId,
+      type: data.type,
+      balance: '0.00',
+      status: 'active',
     });
   }
 
@@ -28,12 +29,25 @@ export class AccountsService {
     return account;
   }
 
-  async updateBalance(id: number, userId: number, amount: string) {
-    const account = await this.findOne(id, userId);
-    const currentBalance = parseFloat(account.balance);
-    const changeAmount = parseFloat(amount);
-    const newBalance = (currentBalance + changeAmount).toFixed(2);
+  /** Fetch an account without an ownership check — for internal/system callers (webhooks, settlements). */
+  async findByIdInternal(id: number) {
+    const account = await this.accountsRepository.findById(id);
+    if (!account) {
+      throw new NotFoundException('Account not found');
+    }
+    return account;
+  }
 
+  /** Ownership-checked balance change (user-initiated). */
+  async updateBalance(id: number, userId: number, amount: string) {
+    await this.findOne(id, userId);
+    return this.adjustBalance(id, amount);
+  }
+
+  /** System-context balance change; `amount` may be negative. Single home for balance arithmetic. */
+  async adjustBalance(id: number, amount: string) {
+    const account = await this.findByIdInternal(id);
+    const newBalance = (parseFloat(account.balance) + parseFloat(amount)).toFixed(2);
     return this.accountsRepository.updateBalance(id, newBalance);
   }
 }

@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TransactionsService } from '../transactions.service';
 import { TransactionsRepository } from '../transactions.repository';
 import { AccountsService } from '../../accounts/accounts.service';
-import { AccountsRepository } from '../../accounts/accounts.repository';
 import { NotFoundException } from '@nestjs/common';
 
 describe('TransactionsService', () => {
@@ -29,14 +28,10 @@ describe('TransactionsService', () => {
     updateStatus: jest.fn(),
   };
 
-  const mockAccountsRepo = {
-    findById: jest.fn(),
-    updateBalance: jest.fn(),
-  };
-
   const mockAccountsService = {
     findOne: jest.fn(),
     updateBalance: jest.fn(),
+    adjustBalance: jest.fn(),
     findAllByUser: jest.fn(),
   };
 
@@ -45,7 +40,6 @@ describe('TransactionsService', () => {
       providers: [
         TransactionsService,
         { provide: TransactionsRepository, useValue: mockTransactionsRepo },
-        { provide: AccountsRepository, useValue: mockAccountsRepo },
         { provide: AccountsService, useValue: mockAccountsService },
       ],
     }).compile();
