@@ -23,14 +23,16 @@ export function DepositForm() {
           <div className="mb-6 p-4 bg-success/10 border border-success/20 rounded-xl">
             <div className="flex items-center gap-2 mb-2">
               <Zap className="w-5 h-5 text-success-light" />
-              <span className="font-semibold text-success-light">Deposit successful!</span>
+              <span className="font-semibold text-success-light">
+                {result.status === 'pending' ? 'Deposit initiated' : 'Deposit successful!'}
+              </span>
             </div>
             <p className="text-sm text-content-muted">
               {result.message || `Deposited $${parseFloat(result.transaction?.amount || 0).toFixed(2)}`}
             </p>
             <div className="mt-3">
-              <Badge variant="success">
-                {result.transaction?.status || 'completed'}
+              <Badge variant={result.status === 'pending' ? 'warning' : 'success'}>
+                {result.status || 'completed'}
               </Badge>
             </div>
           </div>

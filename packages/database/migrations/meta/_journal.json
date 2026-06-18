@@ -22,6 +22,13 @@
       "when": 1781799530899,
       "tag": "0002_red_malcolm_colcord",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781804833715,
+      "tag": "0003_amazing_wallflower",
+      "breakpoints": true
     }
   ]
 }

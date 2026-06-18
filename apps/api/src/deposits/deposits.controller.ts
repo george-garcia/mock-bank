@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Headers } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Headers } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -50,5 +50,11 @@ export class DepositsController {
     @Body() dto: CreateDepositDto,
   ) {
     return this.depositsService.simulatePayrollDeposit(userId, dto.accountId, dto.amount);
+  }
+
+  @Get('pending')
+  @ApiOperation({ summary: 'List the current user\'s not-yet-cleared deposits' })
+  async pending(@CurrentUser('sub') userId: number) {
+    return this.depositsService.listPending(userId);
   }
 }

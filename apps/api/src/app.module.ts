@@ -1,5 +1,6 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
@@ -28,6 +29,7 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger.midd
       ttl: 60000,
       limit: 100,
     }]),
+    ScheduleModule.forRoot(),
     AuditModule,
     EmailModule,
     AuthModule,

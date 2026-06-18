@@ -18,6 +18,7 @@ export const ledgerTxnTypeEnum = pgEnum('ledger_txn_type', [
 export const ledgerTxnStatusEnum = pgEnum('ledger_txn_status', ['pending', 'posted', 'reversed']);
 export const holdStatusEnum = pgEnum('hold_status', ['active', 'released', 'captured', 'expired']);
 export const holdTypeEnum = pgEnum('hold_type', ['card_auth', 'manual']);
+export const pendingDepositStatusEnum = pgEnum('pending_deposit_status', ['pending', 'cleared', 'failed']);
 
 // Users table
 export const users = pgTable('users', {
@@ -114,6 +115,23 @@ export const holds = pgTable('holds', {
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   releasedAt: timestamp('released_at', { withTimezone: true }),
   metadata: text('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ACH-style deposits that have been initiated but not yet cleared. A durable, restart-safe
+// queue: a scheduled job posts each to the ledger once clearAt passes. Funds are not credited
+// (not in the ledger) until cleared.
+export const pendingDeposits = pgTable('pending_deposits', {
+  id: serial('id').primaryKey(),
+  accountId: integer('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+  description: text('description'),
+  source: varchar('source', { length: 64 }),
+  status: pendingDepositStatusEnum('status').notNull().default('pending'),
+  clearAt: timestamp('clear_at', { withTimezone: true }).notNull(),
+  idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(), // used when posting on clear
+  clearedTransactionId: integer('cleared_transaction_id').references(() => ledgerTransactions.id),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
@@ -229,6 +247,8 @@ export type Hold = typeof holds.$inferSelect;
 export type NewHold = typeof holds.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
+export type PendingDeposit = typeof pendingDeposits.$inferSelect;
+export type NewPendingDeposit = typeof pendingDeposits.$inferInsert;
 export type Card = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
 export type CardTransaction = typeof cardTransactions.$inferSelect;
