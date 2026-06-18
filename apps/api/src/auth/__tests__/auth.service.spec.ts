@@ -24,14 +24,18 @@ describe('AuthService', () => {
     passwordHash: 'hashedpassword',
     twoFactorMethod: 'none' as const,
     totpSecret: null,
+    failedLoginAttempts: 0,
+    lockedUntil: null as Date | null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const mockUsersService = {
       findByEmail: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
     };
 
     const mockJwtService = {
@@ -184,6 +188,24 @@ describe('AuthService', () => {
           password: 'wrongpassword',
         }),
       ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('locks the account after the final failed attempt', async () => {
+      jest.spyOn(usersService, 'findByEmail').mockResolvedValue({ ...mockUser, failedLoginAttempts: 4 });
+      (bcryptjs.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.login({ email: 'test@example.com', password: 'x' })).rejects.toThrow(UnauthorizedException);
+      expect(usersService.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ failedLoginAttempts: 5, lockedUntil: expect.any(Date) }),
+      );
+    });
+
+    it('rejects login while the account is locked, before checking the password', async () => {
+      jest.spyOn(usersService, 'findByEmail').mockResolvedValue({ ...mockUser, lockedUntil: new Date(Date.now() + 60_000) });
+
+      await expect(service.login({ email: 'test@example.com', password: 'password123' })).rejects.toThrow(UnauthorizedException);
+      expect(bcryptjs.compare).not.toHaveBeenCalled();
     });
   });
 });

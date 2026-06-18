@@ -8,6 +8,9 @@ import { AuditService } from '../audit/audit.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
+const MAX_FAILED_LOGINS = 5;
+const LOCK_MINUTES = 15;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -50,10 +53,35 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Reject while the account is locked from prior failed attempts.
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+      await this.auditService.record({
+        actorUserId: user.id,
+        action: 'auth.login_blocked',
+        metadata: { reason: 'account_locked', lockedUntil: user.lockedUntil.toISOString() },
+      });
+      throw new UnauthorizedException('Account temporarily locked. Try again later.');
+    }
+
     const isValid = await bcryptjs.compare(dto.password, user.passwordHash);
     if (!isValid) {
-      await this.auditService.record({ actorUserId: user.id, action: 'auth.login_failed', metadata: { reason: 'bad_password' } });
+      const attempts = user.failedLoginAttempts + 1;
+      const locked = attempts >= MAX_FAILED_LOGINS;
+      await this.usersService.update(user.id, {
+        failedLoginAttempts: attempts,
+        lockedUntil: locked ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
+      });
+      await this.auditService.record({
+        actorUserId: user.id,
+        action: locked ? 'auth.account_locked' : 'auth.login_failed',
+        metadata: { reason: 'bad_password', attempts },
+      });
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Successful password check — clear any failed-attempt state.
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      await this.usersService.update(user.id, { failedLoginAttempts: 0, lockedUntil: null });
     }
 
     // When 2FA is enabled, withhold the session token and issue a challenge instead.

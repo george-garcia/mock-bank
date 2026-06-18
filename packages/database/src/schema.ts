@@ -29,6 +29,8 @@ export const users = pgTable('users', {
   lastName: varchar('last_name', { length: 100 }).notNull(),
   twoFactorMethod: twoFactorMethodEnum('two_factor_method').notNull().default('none'),
   totpSecret: varchar('totp_secret', { length: 255 }), // base32 secret, only active once twoFactorMethod = 'totp'
+  failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }), // set while the account is locked
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

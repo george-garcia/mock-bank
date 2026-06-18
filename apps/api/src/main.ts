@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -21,7 +22,11 @@ function assertSecrets() {
 
 async function bootstrap() {
   assertSecrets();
-  const app = await NestFactory.create(AppModule);
+  // rawBody is needed to verify webhook HMAC signatures over the exact bytes received.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
+
+  // Security headers (HSTS, X-Content-Type-Options, frame/referrer policy, etc.).
+  app.use(helmet());
 
   app.enableCors({
     origin: (origin, callback) => {

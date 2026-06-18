@@ -29,6 +29,13 @@
       "when": 1781804833715,
       "tag": "0003_amazing_wallflower",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781820375735,
+      "tag": "0004_goofy_madripoor",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
-import { Controller, Post, Body, Headers } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { LithicWebhookService, LithicWebhookPayload } from './lithic-webhook.service';
+import { LithicWebhookGuard } from './lithic-webhook.guard';
 
 @ApiTags('Webhooks')
 @Controller('webhooks/lithic')
@@ -8,12 +9,9 @@ export class LithicWebhookController {
   constructor(private lithicWebhookService: LithicWebhookService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Receive Lithic webhook events' })
-  async handleWebhook(
-    @Body() body: LithicWebhookPayload,
-    // In production, verify this signature before processing.
-    @Headers('x-lithic-webhook-secret') _signature: string,
-  ) {
+  @UseGuards(LithicWebhookGuard)
+  @ApiOperation({ summary: 'Receive Lithic webhook events (HMAC-signature verified)' })
+  async handleWebhook(@Body() body: LithicWebhookPayload) {
     return this.lithicWebhookService.processEvent(body);
   }
 }

@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { TwoFactorService } from './two-factor.service';
@@ -7,6 +8,7 @@ import { VerifyCodeDto } from './dto/verify-code.dto';
 import { VerifyLoginDto } from './dto/verify-login.dto';
 
 @ApiTags('Two-Factor Auth')
+@Throttle({ default: { limit: 20, ttl: 60000 } })
 @Controller('auth/2fa')
 export class TwoFactorController {
   constructor(private twoFactorService: TwoFactorService) {}
@@ -14,6 +16,7 @@ export class TwoFactorController {
   // ---- Login (public) -----------------------------------------------------
 
   @Post('verify-login')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Complete a 2FA login challenge and receive a session token' })
   @ApiResponse({ status: 200, description: 'Login complete' })

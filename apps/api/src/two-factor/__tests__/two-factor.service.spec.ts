@@ -31,6 +31,8 @@ describe('TwoFactorService', () => {
     passwordHash: 'hash',
     twoFactorMethod: 'none' as 'none' | 'email' | 'totp',
     totpSecret: null as string | null,
+    failedLoginAttempts: 0,
+    lockedUntil: null as Date | null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
