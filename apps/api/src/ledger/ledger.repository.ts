@@ -1,5 +1,5 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { eq, inArray, desc, and, sum } from 'drizzle-orm';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { eq, inArray, desc, and, sum, lt, isNotNull } from 'drizzle-orm';
 import {
   db,
   ledgerAccounts,
@@ -29,6 +29,8 @@ export interface PostInput {
   entries: PostEntry[];
   /** Allow a customer account to go negative (e.g. a forced card settlement). */
   allowNegative?: boolean;
+  /** Set when this journal reverses another (the original's id). */
+  reversalOfId?: number;
 }
 
 @Injectable()
@@ -166,8 +168,57 @@ export class LedgerRepository {
    */
   async post(input: PostInput) {
     this.validate(input);
+    return db.transaction(async (tx) => this.applyJournal(tx, input));
+  }
 
+  /**
+   * Reverse a posted journal with a new, offsetting journal (entries mirrored). The original
+   * is never edited — it is marked 'reversed'. Idempotent: a second call returns the existing
+   * reversal. Reversals are forced posts (may push an account negative).
+   */
+  async reverse(originalTxnId: number, reason?: string) {
     return db.transaction(async (tx) => {
+      const [orig] = await tx.select().from(ledgerTransactions).where(eq(ledgerTransactions.id, originalTxnId));
+      if (!orig) throw new NotFoundException('Transaction not found');
+
+      if (orig.status === 'reversed') {
+        const [rev] = await tx.select().from(ledgerTransactions).where(eq(ledgerTransactions.reversalOfId, originalTxnId));
+        const entries = rev ? await tx.select().from(ledgerEntries).where(eq(ledgerEntries.transactionId, rev.id)) : [];
+        return { transaction: rev ?? orig, entries, idempotentReplay: true };
+      }
+
+      const origEntries = await tx.select().from(ledgerEntries).where(eq(ledgerEntries.transactionId, originalTxnId));
+      const mirror: PostEntry[] = origEntries.map((e) => ({
+        ledgerAccountId: e.ledgerAccountId,
+        direction: e.direction === 'debit' ? 'credit' : 'debit',
+        amountMinor: e.amountMinor,
+      }));
+
+      const result = await this.applyJournal(tx, {
+        idempotencyKey: `reversal:${originalTxnId}`,
+        type: 'reversal',
+        reversalOfId: originalTxnId,
+        description: reason ?? `Reversal of transaction ${originalTxnId}`,
+        entries: mirror,
+        allowNegative: true,
+      });
+
+      await tx.update(ledgerTransactions).set({ status: 'reversed' }).where(eq(ledgerTransactions.id, originalTxnId));
+      return result;
+    });
+  }
+
+  /** Expire active holds past their expiry, freeing the reserved funds. Returns the count. */
+  async expireHolds(now: Date): Promise<number> {
+    const expired = await db
+      .update(holds)
+      .set({ status: 'expired', releasedAt: now, updatedAt: now })
+      .where(and(eq(holds.status, 'active'), isNotNull(holds.expiresAt), lt(holds.expiresAt, now)))
+      .returning();
+    return expired.length;
+  }
+
+  private async applyJournal(tx: any, input: PostInput) {
       // Idempotency: insert the journal header; if the key already exists, this is a retry —
       // return the prior result without re-applying any entries.
       const inserted = await tx
@@ -177,6 +228,7 @@ export class LedgerRepository {
           type: input.type,
           status: 'posted',
           description: input.description,
+          reversalOfId: input.reversalOfId,
           metadata: input.metadata ? JSON.stringify(input.metadata) : null,
         })
         .onConflictDoNothing({ target: ledgerTransactions.idempotencyKey })
@@ -203,7 +255,7 @@ export class LedgerRepository {
       if (locked.length !== accountIds.length) {
         throw new BadRequestException('Unknown ledger account in journal');
       }
-      const byId = new Map(locked.map((a) => [a.id, a]));
+      const byId = new Map<number, LedgerAccount>((locked as LedgerAccount[]).map((a) => [a.id, a]));
 
       // Compute resulting balances (entry in the account's normal side increases it).
       const newBalances = new Map<number, number>(accountIds.map((id) => [id, byId.get(id)!.balanceMinor]));
@@ -254,7 +306,6 @@ export class LedgerRepository {
 
       const entries = await tx.select().from(ledgerEntries).where(eq(ledgerEntries.transactionId, journal.id));
       return { transaction: journal, entries, idempotentReplay: false };
-    });
   }
 
   private validate(input: PostInput) {

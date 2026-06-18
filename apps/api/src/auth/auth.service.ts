@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcryptjs from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
+import { AuditService } from '../audit/audit.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
@@ -12,6 +13,7 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private twoFactorService: TwoFactorService,
+    private auditService: AuditService,
     private jwtService: JwtService,
     private configService: ConfigService,
   ) {}
@@ -44,19 +46,23 @@ export class AuthService {
   async login(dto: LoginDto) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
+      await this.auditService.record({ action: 'auth.login_failed', metadata: { email: dto.email, reason: 'unknown_user' } });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isValid = await bcryptjs.compare(dto.password, user.passwordHash);
     if (!isValid) {
+      await this.auditService.record({ actorUserId: user.id, action: 'auth.login_failed', metadata: { reason: 'bad_password' } });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     // When 2FA is enabled, withhold the session token and issue a challenge instead.
     if (user.twoFactorMethod !== 'none') {
+      await this.auditService.record({ actorUserId: user.id, action: 'auth.login_2fa_challenge' });
       return this.twoFactorService.issueLoginChallenge(user);
     }
 
+    await this.auditService.record({ actorUserId: user.id, action: 'auth.login' });
     const token = this.generateToken(user.id, user.email);
 
     return {

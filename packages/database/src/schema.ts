@@ -118,6 +118,19 @@ export const holds = pgTable('holds', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Append-only audit trail of security- and money-significant events.
+export const auditLogs = pgTable('audit_logs', {
+  id: serial('id').primaryKey(),
+  actorUserId: integer('actor_user_id').references(() => users.id, { onDelete: 'set null' }), // null = system/webhook
+  action: varchar('action', { length: 100 }).notNull(), // e.g. 'money.deposit', 'auth.login', 'card.refund'
+  targetType: varchar('target_type', { length: 50 }),
+  targetId: varchar('target_id', { length: 64 }),
+  amountMinor: bigint('amount_minor', { mode: 'number' }),
+  ip: varchar('ip', { length: 64 }),
+  metadata: text('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Cards ─────────────────────────────────────────────────────────────────
 
 export const cards = pgTable('cards', {
@@ -214,6 +227,8 @@ export type LedgerEntry = typeof ledgerEntries.$inferSelect;
 export type NewLedgerEntry = typeof ledgerEntries.$inferInsert;
 export type Hold = typeof holds.$inferSelect;
 export type NewHold = typeof holds.$inferInsert;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type Card = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
 export type CardTransaction = typeof cardTransactions.$inferSelect;

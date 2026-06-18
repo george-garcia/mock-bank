@@ -1,6 +1,8 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { CardsService } from '../cards/cards.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { AuditService } from '../audit/audit.service';
+import { toMinor } from '../common/money';
 
 export interface LithicWebhookPayload {
   event_type: string;
@@ -37,6 +39,7 @@ export class LithicWebhookService {
   constructor(
     private cardsService: CardsService,
     private ledgerService: LedgerService,
+    private auditService: AuditService,
   ) {}
 
   async processEvent(body: LithicWebhookPayload) {
@@ -45,8 +48,14 @@ export class LithicWebhookService {
     switch (body.event_type) {
       case 'authorization':
         return this.handleAuthorization(body.payload);
+      case 'authorization.reversal':
+        return this.handleAuthReversal(body.payload);
       case 'settlement':
         return this.handleSettlement(body.payload);
+      case 'refund':
+        return this.handleRefund(body.payload);
+      case 'return':
+        return this.handleReturn(body.payload);
       case 'card.created':
         return this.handleCardCreated(body.payload);
       case 'card.status_changed':
@@ -55,6 +64,60 @@ export class LithicWebhookService {
         this.logger.warn(`Unhandled Lithic event type: ${body.event_type}`);
         return { received: true };
     }
+  }
+
+  // Authorization reversal — the merchant/processor cancels the auth before settlement.
+  // Release the hold (frees available funds) and void the card transaction.
+  private async handleAuthReversal(payload: EventPayload) {
+    if (!payload.token) throw new BadRequestException('Missing transaction token');
+    await this.ledgerService.releaseHold(`card_auth:${payload.token}`);
+    const cardTx = await this.cardsService.findCardTransactionByLithicToken(payload.token);
+    if (cardTx) await this.cardsService.voidCardTransaction(cardTx.id);
+    await this.auditService.record({ action: 'card.auth_reversal', targetType: 'card_transaction', targetId: payload.token });
+    this.logger.log(`Reversed authorization ${payload.token}`);
+    return { reversed: true };
+  }
+
+  // Merchant credit / refund — money flows back to the customer account.
+  private async handleRefund(payload: EventPayload) {
+    if (!payload.card_token || payload.amount === undefined) {
+      throw new BadRequestException('Missing card_token or amount');
+    }
+    const card = await this.cardsService.findByLithicToken(payload.card_token);
+    if (!card) {
+      this.logger.error(`Card not found for refund: ${payload.card_token}`);
+      return { processed: false };
+    }
+    const amount = Math.abs(payload.amount).toFixed(2);
+    const result = await this.ledgerService.refund(card.accountId, {
+      amount,
+      description: `Refund: ${payload.merchant?.descriptor || 'merchant credit'}`,
+      idempotencyKey: `refund:${payload.token}`,
+    });
+    await this.auditService.record({
+      action: 'card.refund',
+      targetType: 'account',
+      targetId: card.accountId,
+      amountMinor: toMinor(amount),
+      metadata: { token: payload.token, transactionId: result.transaction.id },
+    });
+    this.logger.log(`Refunded ${amount} to account ${card.accountId}`);
+    return { processed: true, transactionId: result.transaction.id };
+  }
+
+  // Return / chargeback of a settled purchase — reverse the settlement journal.
+  private async handleReturn(payload: EventPayload) {
+    if (!payload.token) throw new BadRequestException('Missing transaction token');
+    const cardTx = await this.cardsService.findCardTransactionByLithicToken(payload.token);
+    if (!cardTx || !cardTx.transactionId) {
+      this.logger.error(`No settled card transaction to return for token: ${payload.token}`);
+      return { processed: false };
+    }
+    const result = await this.ledgerService.reverse(cardTx.transactionId, `Card return/chargeback for ${payload.token}`);
+    await this.cardsService.voidCardTransaction(cardTx.id);
+    await this.auditService.record({ action: 'card.return', targetType: 'card_transaction', targetId: payload.token });
+    this.logger.log(`Returned settlement ${payload.token}`);
+    return { processed: true, reversalId: result.transaction.id };
   }
 
   private async handleAuthorization(payload: EventPayload) {
@@ -149,6 +212,14 @@ export class LithicWebhookService {
 
     // Link the card transaction to its ledger journal and mark it settled.
     await this.cardsService.settleCardTransaction(cardTx.id, result.transaction.id);
+
+    await this.auditService.record({
+      action: 'card.settlement',
+      targetType: 'account',
+      targetId: card.accountId,
+      amountMinor: toMinor(settleAmount),
+      metadata: { token: payload.token, transactionId: result.transaction.id },
+    });
 
     this.logger.log(`Settled ${settleAmount} (${payload.token})`);
     return { processed: true };

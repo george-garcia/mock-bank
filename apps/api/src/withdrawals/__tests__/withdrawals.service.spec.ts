@@ -3,23 +3,27 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { WithdrawalsService } from '../withdrawals.service';
 import { AccountsService } from '../../accounts/accounts.service';
 import { LedgerService } from '../../ledger/ledger.service';
+import { AuditService } from '../../audit/audit.service';
 
 describe('WithdrawalsService', () => {
   let service: WithdrawalsService;
   let accounts: jest.Mocked<Pick<AccountsService, 'findOne'>>;
   let ledger: jest.Mocked<Pick<LedgerService, 'withdraw'>>;
+  let audit: { record: jest.Mock };
 
   beforeEach(async () => {
     accounts = { findOne: jest.fn().mockResolvedValue({ id: 1, userId: 1 }) };
     ledger = {
       withdraw: jest.fn().mockResolvedValue({ transaction: { id: 5, type: 'withdrawal' }, entries: [], idempotentReplay: false }),
     };
+    audit = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WithdrawalsService,
         { provide: AccountsService, useValue: accounts },
         { provide: LedgerService, useValue: ledger },
+        { provide: AuditService, useValue: audit },
       ],
     }).compile();
 

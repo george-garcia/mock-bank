@@ -126,4 +126,8 @@ export class CardsService {
   async settleCardTransaction(id: number, ledgerTransactionId: number) {
     return this.cardsRepository.updateCardTransactionStatus(id, 'settled', ledgerTransactionId);
   }
+
+  async voidCardTransaction(id: number) {
+    return this.cardsRepository.updateCardTransactionStatus(id, 'voided');
+  }
 }

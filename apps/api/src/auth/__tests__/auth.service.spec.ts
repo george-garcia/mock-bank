@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth.service';
 import { UsersService } from '../../users/users.service';
 import { TwoFactorService } from '../../two-factor/two-factor.service';
+import { AuditService } from '../../audit/audit.service';
 import * as bcryptjs from 'bcryptjs';
 
 jest.mock('bcryptjs');
@@ -45,6 +46,10 @@ describe('AuthService', () => {
       issueLoginChallenge: jest.fn(),
     };
 
+    const mockAuditService = {
+      record: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -55,6 +60,10 @@ describe('AuthService', () => {
         {
           provide: TwoFactorService,
           useValue: mockTwoFactorService,
+        },
+        {
+          provide: AuditService,
+          useValue: mockAuditService,
         },
         {
           provide: JwtService,

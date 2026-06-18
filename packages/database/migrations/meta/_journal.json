@@ -15,6 +15,13 @@
       "when": 1781747142095,
       "tag": "0001_youthful_starfox",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781799530899,
+      "tag": "0002_red_malcolm_colcord",
+      "breakpoints": true
     }
   ]
 }

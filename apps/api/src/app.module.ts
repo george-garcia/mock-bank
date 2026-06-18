@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
+import { AuditModule } from './audit/audit.module';
 import { EmailModule } from './email/email.module';
 import { TwoFactorModule } from './two-factor/two-factor.module';
 import { UsersModule } from './users/users.module';
@@ -27,6 +28,7 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger.midd
       ttl: 60000,
       limit: 100,
     }]),
+    AuditModule,
     EmailModule,
     AuthModule,
     TwoFactorModule,

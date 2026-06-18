@@ -9,7 +9,7 @@ describe('LedgerService', () => {
     Pick<LedgerRepository,
       'customerLedgerAccountId' | 'systemLedgerAccountId' | 'createCustomerLedgerAccount' |
       'balanceMinorForAccount' | 'balancesForAccounts' | 'activeHoldsForAccounts' |
-      'historyForAccount' | 'post' | 'placeHold' | 'resolveHold'>
+      'historyForAccount' | 'post' | 'placeHold' | 'resolveHold' | 'reverse' | 'expireHolds'>
   >;
 
   beforeEach(async () => {
@@ -24,6 +24,8 @@ describe('LedgerService', () => {
       post: jest.fn().mockResolvedValue({ transaction: { id: 99 }, entries: [], idempotentReplay: false }),
       placeHold: jest.fn(),
       resolveHold: jest.fn(),
+      reverse: jest.fn().mockResolvedValue({ transaction: { id: 100 }, entries: [], idempotentReplay: false }),
+      expireHolds: jest.fn().mockResolvedValue(2),
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [LedgerService, { provide: LedgerRepository, useValue: repo }],
@@ -121,6 +123,38 @@ describe('LedgerService', () => {
           ],
         }),
       );
+    });
+  });
+
+  describe('refund', () => {
+    it('credits the customer and debits card_network (money back to the account)', async () => {
+      repo.customerLedgerAccountId.mockResolvedValue(10);
+      repo.systemLedgerAccountId.mockResolvedValue(2); // card_network
+
+      await service.refund(5, { amount: '12.34', idempotencyKey: 'refund:tok' });
+
+      expect(repo.post).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'refund',
+          entries: [
+            { ledgerAccountId: 2, direction: 'debit', amountMinor: 1234 },
+            { ledgerAccountId: 10, direction: 'credit', amountMinor: 1234 },
+          ],
+        }),
+      );
+    });
+  });
+
+  describe('reverse / expireHolds', () => {
+    it('delegates reverse to the repository', async () => {
+      await service.reverse(42, 'returned');
+      expect(repo.reverse).toHaveBeenCalledWith(42, 'returned');
+    });
+
+    it('delegates expireHolds to the repository', async () => {
+      const n = await service.expireHolds();
+      expect(repo.expireHolds).toHaveBeenCalled();
+      expect(n).toBe(2);
     });
   });
 

@@ -135,6 +135,32 @@ export class LedgerService {
     });
   }
 
+  /** Merchant credit / card refund: money flows back to the account (credit customer). */
+  async refund(accountId: number, input: MoveInput) {
+    const minor = this.requirePositive(input.amount);
+    const customer = await this.requireCustomer(accountId);
+    const network = await this.repo.systemLedgerAccountId('card_network');
+    return this.repo.post({
+      idempotencyKey: input.idempotencyKey ?? randomUUID(),
+      type: 'refund',
+      description: input.description,
+      entries: [
+        { ledgerAccountId: network, direction: 'debit', amountMinor: minor },
+        { ledgerAccountId: customer, direction: 'credit', amountMinor: minor },
+      ],
+    });
+  }
+
+  /** Reverse a posted journal with an offsetting journal (returned deposit, chargeback, etc.). */
+  reverse(transactionId: number, reason?: string) {
+    return this.repo.reverse(transactionId, reason);
+  }
+
+  /** Release any holds past their expiry (would be called by a scheduled job). */
+  expireHolds() {
+    return this.repo.expireHolds(new Date());
+  }
+
   /** Per-account history, derived from immutable ledger entries (API-compatible shape). */
   async historyForAccount(accountId: number) {
     const rows = await this.repo.historyForAccount(accountId);

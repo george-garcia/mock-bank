@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { AccountsService } from '../accounts/accounts.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { AuditService } from '../audit/audit.service';
+import { toMinor } from '../common/money';
 
 interface DepositOptions {
   accountId: number;
@@ -16,6 +18,7 @@ export class DepositsService {
   constructor(
     private accountsService: AccountsService,
     private ledgerService: LedgerService,
+    private auditService: AuditService,
   ) {}
 
   async simulateDeposit(userId: number, options: DepositOptions) {
@@ -25,11 +28,20 @@ export class DepositsService {
     await this.accountsService.findOne(accountId, userId);
 
     // Posts immediately as a single balanced ledger journal. (Durable ACH-style pending →
-    // cleared lifecycle via a job queue is P1; P0 credits on receipt.)
+    // cleared lifecycle via a job queue is a later slice; this credits on receipt.)
     const transaction = await this.ledgerService.deposit(accountId, {
       amount,
       description: description || `Deposit from ${source}`,
       idempotencyKey,
+    });
+
+    await this.auditService.record({
+      actorUserId: userId,
+      action: 'money.deposit',
+      targetType: 'account',
+      targetId: accountId,
+      amountMinor: toMinor(amount),
+      metadata: { source, transactionId: transaction.transaction.id },
     });
 
     return {

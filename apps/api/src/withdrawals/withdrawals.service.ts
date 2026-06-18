@@ -1,12 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { AccountsService } from '../accounts/accounts.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { AuditService } from '../audit/audit.service';
+import { toMinor } from '../common/money';
 
 @Injectable()
 export class WithdrawalsService {
   constructor(
     private accountsService: AccountsService,
     private ledgerService: LedgerService,
+    private auditService: AuditService,
   ) {}
 
   async withdraw(userId: number, accountId: number, amount: string, description?: string, idempotencyKey?: string) {
@@ -17,6 +20,15 @@ export class WithdrawalsService {
       amount,
       description: description || 'Withdrawal',
       idempotencyKey,
+    });
+
+    await this.auditService.record({
+      actorUserId: userId,
+      action: 'money.withdrawal',
+      targetType: 'account',
+      targetId: accountId,
+      amountMinor: toMinor(amount),
+      metadata: { transactionId: transaction.transaction.id },
     });
 
     return {
