@@ -1,130 +1,60 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { DepositsService } from '../deposits.service';
 import { AccountsService } from '../../accounts/accounts.service';
-import { TransactionsService } from '../../transactions/transactions.service';
+import { LedgerService } from '../../ledger/ledger.service';
 
 describe('DepositsService', () => {
   let service: DepositsService;
-
-  const mockTransaction = {
-    id: 1,
-    accountId: 1,
-    type: 'deposit' as const,
-    amount: '100.00',
-    balanceAfter: '100.00',
-    description: 'Test deposit',
-    status: 'completed' as const,
-    metadata: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  const mockAccountsService = {
-    findOne: jest.fn(),
-  };
-
-  const mockTransactionsService = {
-    recordTransaction: jest.fn(),
-    createPendingTransaction: jest.fn(),
-    completeTransaction: jest.fn(),
-  };
+  let accounts: jest.Mocked<Pick<AccountsService, 'findOne'>>;
+  let ledger: jest.Mocked<Pick<LedgerService, 'deposit'>>;
 
   beforeEach(async () => {
+    accounts = { findOne: jest.fn().mockResolvedValue({ id: 1, userId: 1 }) };
+    ledger = {
+      deposit: jest.fn().mockResolvedValue({ transaction: { id: 7, type: 'deposit' }, entries: [], idempotentReplay: false }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DepositsService,
-        { provide: AccountsService, useValue: mockAccountsService },
-        { provide: TransactionsService, useValue: mockTransactionsService },
+        { provide: AccountsService, useValue: accounts },
+        { provide: LedgerService, useValue: ledger },
       ],
     }).compile();
 
     service = module.get<DepositsService>(DepositsService);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
   describe('simulateDeposit', () => {
-    it('should create an instant deposit', async () => {
-      mockAccountsService.findOne.mockResolvedValue({ id: 1, userId: 1, balance: '0.00' });
-      mockTransactionsService.recordTransaction.mockResolvedValue(mockTransaction);
+    it('checks ownership, posts via the ledger, and reports completed', async () => {
+      const result = await service.simulateDeposit(1, { accountId: 1, amount: '100.00', instant: true });
 
-      const result = await service.simulateDeposit(1, {
-        accountId: 1,
-        amount: '100.00',
-        instant: true,
-      });
-
+      expect(accounts.findOne).toHaveBeenCalledWith(1, 1);
+      expect(ledger.deposit).toHaveBeenCalledWith(1, expect.objectContaining({ amount: '100.00' }));
       expect(result.status).toBe('completed');
-      expect(result.transaction).toEqual(mockTransaction);
-      expect(mockTransactionsService.recordTransaction).toHaveBeenCalled();
+      expect(result.transaction.amount).toBe('100.00');
     });
 
-    it('should create a pending ACH deposit', async () => {
-      mockAccountsService.findOne.mockResolvedValue({ id: 1, userId: 1, balance: '0.00' });
-      mockTransactionsService.createPendingTransaction.mockResolvedValue({
-        ...mockTransaction,
-        status: 'pending' as const,
-        description: 'ACH deposit from simulated',
-      });
-
-      const result = await service.simulateDeposit(1, {
-        accountId: 1,
-        amount: '100.00',
-        instant: false,
-      });
-
-      expect(result.status).toBe('pending');
-      expect(mockTransactionsService.createPendingTransaction).toHaveBeenCalled();
-    });
-
-    it('should verify account ownership before depositing', async () => {
-      mockAccountsService.findOne.mockResolvedValue({ id: 1, userId: 1 });
-      mockTransactionsService.recordTransaction.mockResolvedValue(mockTransaction);
-
-      await service.simulateDeposit(1, { accountId: 1, amount: '100.00', instant: true });
-
-      expect(mockAccountsService.findOne).toHaveBeenCalledWith(1, 1);
+    it('propagates an ownership failure without posting', async () => {
+      accounts.findOne.mockRejectedValue(new NotFoundException());
+      await expect(service.simulateDeposit(1, { accountId: 9, amount: '5.00' })).rejects.toThrow(NotFoundException);
+      expect(ledger.deposit).not.toHaveBeenCalled();
     });
   });
 
   describe('simulateDirectDeposit', () => {
-    it('should create a direct deposit (pending)', async () => {
-      mockAccountsService.findOne.mockResolvedValue({ id: 1, userId: 1 });
-      mockTransactionsService.createPendingTransaction.mockResolvedValue({
-        ...mockTransaction,
-        status: 'pending' as const,
-        description: 'Direct deposit - Payroll',
-      });
-
-      const result = await service.simulateDirectDeposit(1, {
-        accountId: 1,
-        amount: '500.00',
-      });
-
-      expect(result.status).toBe('pending');
-      expect(result.transaction.description).toBe('Direct deposit - Payroll');
+    it('defaults the payroll description', async () => {
+      await service.simulateDirectDeposit(1, { accountId: 1, amount: '500.00' });
+      expect(ledger.deposit).toHaveBeenCalledWith(1, expect.objectContaining({ description: 'Direct deposit - Payroll' }));
     });
   });
 
   describe('simulatePayrollDeposit', () => {
-    it('should create a payroll deposit (pending)', async () => {
-      mockAccountsService.findOne.mockResolvedValue({ id: 1, userId: 1 });
-      mockTransactionsService.createPendingTransaction.mockResolvedValue({
-        ...mockTransaction,
-        status: 'pending' as const,
-        description: 'Payroll deposit',
-      });
-
+    it('posts a payroll deposit', async () => {
       const result = await service.simulatePayrollDeposit(1, 1, '2500.00');
-
-      expect(result.status).toBe('pending');
-      expect(result.transaction.description).toBe('Payroll deposit');
+      expect(ledger.deposit).toHaveBeenCalledWith(1, expect.objectContaining({ description: 'Payroll deposit' }));
+      expect(result.status).toBe('completed');
     });
   });
 });

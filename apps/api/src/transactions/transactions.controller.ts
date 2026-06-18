@@ -34,13 +34,4 @@ export class TransactionsController {
   ) {
     return this.transactionsService.findByAccountId(accountId, userId);
   }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get transaction by ID' })
-  async findOne(
-    @CurrentUser('sub') userId: number,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.transactionsService.findOne(id, userId);
-  }
 }

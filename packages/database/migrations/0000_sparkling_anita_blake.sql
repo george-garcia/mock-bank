@@ -23,13 +23,37 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- CREATE TYPE "public"."transaction_status" AS ENUM('pending', 'completed', 'failed', 'reversed');
+ CREATE TYPE "public"."ledger_account_category" AS ENUM('asset', 'liability', 'equity', 'revenue', 'expense');
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- CREATE TYPE "public"."transaction_type" AS ENUM('deposit', 'withdrawal', 'transfer', 'card_auth', 'card_settlement', 'card_void');
+ CREATE TYPE "public"."ledger_side" AS ENUM('debit', 'credit');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."ledger_txn_status" AS ENUM('pending', 'posted', 'reversed');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."ledger_txn_type" AS ENUM('deposit', 'withdrawal', 'transfer', 'card_settlement', 'card_auth', 'reversal', 'refund', 'fee', 'adjustment');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."otp_purpose" AS ENUM('login', 'enable');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."two_factor_method" AS ENUM('none', 'email', 'totp');
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
@@ -38,7 +62,6 @@ CREATE TABLE IF NOT EXISTS "accounts" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"type" "account_type" DEFAULT 'checking' NOT NULL,
-	"balance" numeric(12, 2) DEFAULT '0.00' NOT NULL,
 	"status" "account_status" DEFAULT 'active' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -80,16 +103,48 @@ CREATE TABLE IF NOT EXISTS "cards" (
 	CONSTRAINT "cards_lithic_card_token_unique" UNIQUE("lithic_card_token")
 );
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "transactions" (
+CREATE TABLE IF NOT EXISTS "ledger_accounts" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"account_id" integer NOT NULL,
-	"type" "transaction_type" NOT NULL,
-	"amount" numeric(12, 2) NOT NULL,
-	"description" text,
-	"status" "transaction_status" DEFAULT 'pending' NOT NULL,
-	"metadata" text,
+	"account_id" integer,
+	"system_kind" varchar(64),
+	"name" varchar(255) NOT NULL,
+	"category" "ledger_account_category" NOT NULL,
+	"normal_side" "ledger_side" NOT NULL,
+	"balance_minor" bigint DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "ledger_entries" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"transaction_id" integer NOT NULL,
+	"ledger_account_id" integer NOT NULL,
+	"direction" "ledger_side" NOT NULL,
+	"amount_minor" bigint NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "ledger_transactions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"idempotency_key" varchar(255) NOT NULL,
+	"type" "ledger_txn_type" NOT NULL,
+	"status" "ledger_txn_status" DEFAULT 'posted' NOT NULL,
+	"description" text,
+	"reversal_of_id" integer,
+	"metadata" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "ledger_transactions_idempotency_key_unique" UNIQUE("idempotency_key")
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "otp_codes" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"code_hash" varchar(255) NOT NULL,
+	"purpose" "otp_purpose" NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"consumed_at" timestamp with time zone,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "users" (
@@ -98,6 +153,8 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"password_hash" varchar(255) NOT NULL,
 	"first_name" varchar(100) NOT NULL,
 	"last_name" varchar(100) NOT NULL,
+	"two_factor_method" "two_factor_method" DEFAULT 'none' NOT NULL,
+	"totp_secret" varchar(255),
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "users_email_unique" UNIQUE("email")
@@ -116,7 +173,7 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "card_transactions" ADD CONSTRAINT "card_transactions_transaction_id_transactions_id_fk" FOREIGN KEY ("transaction_id") REFERENCES "public"."transactions"("id") ON DELETE no action ON UPDATE no action;
+ ALTER TABLE "card_transactions" ADD CONSTRAINT "card_transactions_transaction_id_ledger_transactions_id_fk" FOREIGN KEY ("transaction_id") REFERENCES "public"."ledger_transactions"("id") ON DELETE no action ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
@@ -128,7 +185,28 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "transactions" ADD CONSTRAINT "transactions_account_id_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE cascade ON UPDATE no action;
+ ALTER TABLE "ledger_accounts" ADD CONSTRAINT "ledger_accounts_account_id_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE restrict ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "ledger_entries" ADD CONSTRAINT "ledger_entries_transaction_id_ledger_transactions_id_fk" FOREIGN KEY ("transaction_id") REFERENCES "public"."ledger_transactions"("id") ON DELETE restrict ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "ledger_entries" ADD CONSTRAINT "ledger_entries_ledger_account_id_ledger_accounts_id_fk" FOREIGN KEY ("ledger_account_id") REFERENCES "public"."ledger_accounts"("id") ON DELETE restrict ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "otp_codes" ADD CONSTRAINT "otp_codes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "ledger_accounts_system_kind_idx" ON "ledger_accounts" USING btree ("system_kind");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "ledger_accounts_account_id_idx" ON "ledger_accounts" USING btree ("account_id");

@@ -1,21 +1,25 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AccountsRepository } from './accounts.repository';
+import { LedgerService } from '../ledger/ledger.service';
 
 @Injectable()
 export class AccountsService {
-  constructor(private accountsRepository: AccountsRepository) {}
+  constructor(
+    private accountsRepository: AccountsRepository,
+    private ledgerService: LedgerService,
+  ) {}
 
   async create(userId: number, data: { type: 'checking' | 'savings' }) {
-    return this.accountsRepository.create({
-      userId,
-      type: data.type,
-      balance: '0.00',
-      status: 'active',
-    });
+    const account = await this.accountsRepository.create({ userId, type: data.type, status: 'active' });
+    // Every customer account is backed by a liability ledger account (its balance lives there).
+    await this.ledgerService.openCustomerAccount(account.id, data.type);
+    return this.withBalance(account, '0.00');
   }
 
   async findAllByUser(userId: number) {
-    return this.accountsRepository.findByUserId(userId);
+    const accts = await this.accountsRepository.findByUserId(userId);
+    const balances = await this.ledgerService.getBalances(accts.map((a) => a.id));
+    return accts.map((a) => this.withBalance(a, balances.get(a.id) ?? '0.00'));
   }
 
   async findOne(id: number, userId: number) {
@@ -26,28 +30,19 @@ export class AccountsService {
     if (account.userId !== userId) {
       throw new ForbiddenException('Access denied');
     }
-    return account;
+    return this.withBalance(account, await this.ledgerService.getBalance(id));
   }
 
-  /** Fetch an account without an ownership check — for internal/system callers (webhooks, settlements). */
+  /** Fetch an account without an ownership check — for internal/system callers (webhooks). */
   async findByIdInternal(id: number) {
     const account = await this.accountsRepository.findById(id);
     if (!account) {
       throw new NotFoundException('Account not found');
     }
-    return account;
+    return this.withBalance(account, await this.ledgerService.getBalance(id));
   }
 
-  /** Ownership-checked balance change (user-initiated). */
-  async updateBalance(id: number, userId: number, amount: string) {
-    await this.findOne(id, userId);
-    return this.adjustBalance(id, amount);
-  }
-
-  /** System-context balance change; `amount` may be negative. Single home for balance arithmetic. */
-  async adjustBalance(id: number, amount: string) {
-    const account = await this.findByIdInternal(id);
-    const newBalance = (parseFloat(account.balance) + parseFloat(amount)).toFixed(2);
-    return this.accountsRepository.updateBalance(id, newBalance);
+  private withBalance<T extends object>(account: T, balance: string) {
+    return { ...account, balance };
   }
 }

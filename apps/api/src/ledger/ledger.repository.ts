@@ -1,0 +1,189 @@
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { eq, inArray, desc } from 'drizzle-orm';
+import {
+  db,
+  ledgerAccounts,
+  ledgerTransactions,
+  ledgerEntries,
+  LedgerAccount,
+} from '@mock-bank/database';
+
+export type LedgerSide = 'debit' | 'credit';
+export type LedgerTxnType =
+  | 'deposit' | 'withdrawal' | 'transfer' | 'card_settlement'
+  | 'card_auth' | 'reversal' | 'refund' | 'fee' | 'adjustment';
+
+export interface PostEntry {
+  ledgerAccountId: number;
+  direction: LedgerSide;
+  amountMinor: number;
+}
+
+export interface PostInput {
+  idempotencyKey: string;
+  type: LedgerTxnType;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  entries: PostEntry[];
+  /** Allow a customer account to go negative (e.g. a forced card settlement). */
+  allowNegative?: boolean;
+}
+
+@Injectable()
+export class LedgerRepository {
+  async customerLedgerAccountId(accountId: number): Promise<number | null> {
+    const [la] = await db.select().from(ledgerAccounts).where(eq(ledgerAccounts.accountId, accountId));
+    return la?.id ?? null;
+  }
+
+  async systemLedgerAccountId(kind: string): Promise<number> {
+    const [la] = await db.select().from(ledgerAccounts).where(eq(ledgerAccounts.systemKind, kind));
+    if (!la) throw new Error(`Missing internal GL account: "${kind}". Did the seed run?`);
+    return la.id;
+  }
+
+  async createCustomerLedgerAccount(accountId: number, name: string): Promise<LedgerAccount> {
+    const [la] = await db
+      .insert(ledgerAccounts)
+      .values({ accountId, name, category: 'liability', normalSide: 'credit', balanceMinor: 0 })
+      .returning();
+    return la;
+  }
+
+  async balanceMinorForAccount(accountId: number): Promise<number> {
+    const [la] = await db.select().from(ledgerAccounts).where(eq(ledgerAccounts.accountId, accountId));
+    return la?.balanceMinor ?? 0;
+  }
+
+  async balancesForAccounts(accountIds: number[]): Promise<Map<number, number>> {
+    if (accountIds.length === 0) return new Map();
+    const rows = await db.select().from(ledgerAccounts).where(inArray(ledgerAccounts.accountId, accountIds));
+    return new Map(rows.filter((r) => r.accountId !== null).map((r) => [r.accountId as number, r.balanceMinor]));
+  }
+
+  async historyForAccount(accountId: number) {
+    const laId = await this.customerLedgerAccountId(accountId);
+    if (!laId) return [];
+    return db
+      .select({
+        id: ledgerEntries.id,
+        direction: ledgerEntries.direction,
+        amountMinor: ledgerEntries.amountMinor,
+        createdAt: ledgerEntries.createdAt,
+        transactionId: ledgerTransactions.id,
+        type: ledgerTransactions.type,
+        status: ledgerTransactions.status,
+        description: ledgerTransactions.description,
+      })
+      .from(ledgerEntries)
+      .innerJoin(ledgerTransactions, eq(ledgerEntries.transactionId, ledgerTransactions.id))
+      .where(eq(ledgerEntries.ledgerAccountId, laId))
+      .orderBy(desc(ledgerEntries.createdAt));
+  }
+
+  /**
+   * Post a balanced set of entries atomically: one DB transaction, customer rows locked
+   * FOR UPDATE, idempotent on idempotencyKey, with cached balances updated in the same
+   * transaction. Throws (and rolls back) on imbalance, unknown account, or overdraft.
+   */
+  async post(input: PostInput) {
+    this.validate(input);
+
+    return db.transaction(async (tx) => {
+      // Idempotency: insert the journal header; if the key already exists, this is a retry —
+      // return the prior result without re-applying any entries.
+      const inserted = await tx
+        .insert(ledgerTransactions)
+        .values({
+          idempotencyKey: input.idempotencyKey,
+          type: input.type,
+          status: 'posted',
+          description: input.description,
+          metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+        })
+        .onConflictDoNothing({ target: ledgerTransactions.idempotencyKey })
+        .returning();
+
+      if (inserted.length === 0) {
+        const [existing] = await tx
+          .select()
+          .from(ledgerTransactions)
+          .where(eq(ledgerTransactions.idempotencyKey, input.idempotencyKey));
+        const entries = await tx.select().from(ledgerEntries).where(eq(ledgerEntries.transactionId, existing.id));
+        return { transaction: existing, entries, idempotentReplay: true };
+      }
+
+      const journal = inserted[0];
+      const accountIds = [...new Set(input.entries.map((e) => e.ledgerAccountId))].sort((a, b) => a - b);
+
+      // Lock affected ledger accounts (sorted id order to avoid deadlocks).
+      const locked = await tx
+        .select()
+        .from(ledgerAccounts)
+        .where(inArray(ledgerAccounts.id, accountIds))
+        .for('update');
+      if (locked.length !== accountIds.length) {
+        throw new BadRequestException('Unknown ledger account in journal');
+      }
+      const byId = new Map(locked.map((a) => [a.id, a]));
+
+      // Compute resulting balances (entry in the account's normal side increases it).
+      const newBalances = new Map<number, number>(accountIds.map((id) => [id, byId.get(id)!.balanceMinor]));
+      for (const e of input.entries) {
+        const acct = byId.get(e.ledgerAccountId)!;
+        const delta = e.direction === acct.normalSide ? e.amountMinor : -e.amountMinor;
+        newBalances.set(e.ledgerAccountId, newBalances.get(e.ledgerAccountId)! + delta);
+      }
+
+      // Overdraft guard: customer liability accounts must not go negative.
+      if (!input.allowNegative) {
+        for (const id of accountIds) {
+          const acct = byId.get(id)!;
+          if (acct.accountId !== null && acct.category === 'liability' && newBalances.get(id)! < 0) {
+            throw new BadRequestException('Insufficient funds');
+          }
+        }
+      }
+
+      // Append immutable entries.
+      await tx.insert(ledgerEntries).values(
+        input.entries.map((e) => ({
+          transactionId: journal.id,
+          ledgerAccountId: e.ledgerAccountId,
+          direction: e.direction,
+          amountMinor: e.amountMinor,
+        })),
+      );
+
+      // Update cached balances within the same transaction.
+      for (const id of accountIds) {
+        await tx
+          .update(ledgerAccounts)
+          .set({ balanceMinor: newBalances.get(id)!, updatedAt: new Date() })
+          .where(eq(ledgerAccounts.id, id));
+      }
+
+      const entries = await tx.select().from(ledgerEntries).where(eq(ledgerEntries.transactionId, journal.id));
+      return { transaction: journal, entries, idempotentReplay: false };
+    });
+  }
+
+  private validate(input: PostInput) {
+    if (!input.idempotencyKey) throw new BadRequestException('idempotencyKey is required');
+    if (!input.entries || input.entries.length < 2) {
+      throw new BadRequestException('A journal needs at least two entries');
+    }
+    let debit = 0;
+    let credit = 0;
+    for (const e of input.entries) {
+      if (!Number.isInteger(e.amountMinor) || e.amountMinor <= 0) {
+        throw new BadRequestException('Entry amounts must be positive integers (minor units)');
+      }
+      if (e.direction === 'debit') debit += e.amountMinor;
+      else credit += e.amountMinor;
+    }
+    if (debit !== credit) {
+      throw new BadRequestException(`Unbalanced journal: debits ${debit} ≠ credits ${credit}`);
+    }
+  }
+}

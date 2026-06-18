@@ -1,5 +1,5 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Post, Body, UseGuards, Headers } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { WithdrawalsService } from './withdrawals.service';
@@ -7,6 +7,7 @@ import { CreateWithdrawalDto } from './dto/create-withdrawal.dto';
 
 @ApiTags('Withdrawals')
 @ApiBearerAuth()
+@ApiHeader({ name: 'Idempotency-Key', required: false, description: 'Dedupe key for safe retries' })
 @UseGuards(JwtAuthGuard)
 @Controller('withdrawals')
 export class WithdrawalsController {
@@ -17,12 +18,14 @@ export class WithdrawalsController {
   async withdraw(
     @CurrentUser('sub') userId: number,
     @Body() dto: CreateWithdrawalDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     return this.withdrawalsService.withdraw(
       userId,
       dto.accountId,
       dto.amount,
       dto.description,
+      idempotencyKey,
     );
   }
 

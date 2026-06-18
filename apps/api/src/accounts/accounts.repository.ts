@@ -17,13 +17,4 @@ export class AccountsRepository {
   async findByUserId(userId: number) {
     return db.select().from(accounts).where(eq(accounts.userId, userId)).orderBy(desc(accounts.createdAt));
   }
-
-  async updateBalance(id: number, newBalance: string) {
-    const [account] = await db
-      .update(accounts)
-      .set({ balance: newBalance, updatedAt: new Date() })
-      .where(eq(accounts.id, id))
-      .returning();
-    return account;
-  }
 }

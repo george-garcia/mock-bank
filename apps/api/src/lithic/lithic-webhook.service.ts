@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { CardsService } from '../cards/cards.service';
-import { TransactionsService } from '../transactions/transactions.service';
+import { LedgerService } from '../ledger/ledger.service';
 
 export interface LithicWebhookPayload {
   event_type: string;
@@ -36,7 +36,7 @@ export class LithicWebhookService {
 
   constructor(
     private cardsService: CardsService,
-    private transactionsService: TransactionsService,
+    private ledgerService: LedgerService,
   ) {}
 
   async processEvent(body: LithicWebhookPayload) {
@@ -105,20 +105,22 @@ export class LithicWebhookService {
       return { processed: false };
     }
 
-    await this.cardsService.settleCardTransaction(cardTx.id, payload.token);
-
     const card = await this.cardsService.findByLithicToken(payload.card_token || '');
     if (!card) {
       this.logger.error(`Card not found for settlement: ${payload.card_token}`);
       return { processed: false };
     }
 
-    await this.transactionsService.recordSystemTransaction({
-      accountId: card.accountId,
-      type: 'card_settlement',
+    // Post the settlement to the ledger. The settlement token is the idempotency key, so a
+    // replayed webhook will not double-post.
+    const result = await this.ledgerService.cardSettlement(card.accountId, {
       amount: cardTx.amount,
       description: `Card purchase: ${cardTx.merchantName}`,
+      idempotencyKey: `card_settlement:${payload.token}`,
     });
+
+    // Link the card transaction to its ledger journal and mark it settled.
+    await this.cardsService.settleCardTransaction(cardTx.id, result.transaction.id);
 
     this.logger.log(`Settled transaction: ${payload.token}`);
     return { processed: true };

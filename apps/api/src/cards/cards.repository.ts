@@ -56,10 +56,14 @@ export class CardsRepository {
       .orderBy(desc(cardTransactions.createdAt));
   }
 
-  async updateCardTransactionStatus(id: number, status: 'authorized' | 'declined' | 'settled' | 'voided') {
+  async updateCardTransactionStatus(
+    id: number,
+    status: 'authorized' | 'declined' | 'settled' | 'voided',
+    transactionId?: number,
+  ) {
     const [tx] = await db
       .update(cardTransactions)
-      .set({ status, updatedAt: new Date() })
+      .set({ status, ...(transactionId !== undefined ? { transactionId } : {}), updatedAt: new Date() })
       .where(eq(cardTransactions.id, id))
       .returning();
     return tx;

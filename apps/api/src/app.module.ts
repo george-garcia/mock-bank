@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { EmailModule } from './email/email.module';
 import { TwoFactorModule } from './two-factor/two-factor.module';
 import { UsersModule } from './users/users.module';
+import { LedgerModule } from './ledger/ledger.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { CardsModule } from './cards/cards.module';
@@ -30,6 +31,7 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger.midd
     AuthModule,
     TwoFactorModule,
     UsersModule,
+    LedgerModule,
     AccountsModule,
     TransactionsModule,
     CardsModule,

@@ -117,7 +117,7 @@ export class CardsService {
     return this.cardsRepository.findCardTransactionsByCardId(cardId);
   }
 
-  async settleCardTransaction(id: number, lithicToken: string) {
-    return this.cardsRepository.updateCardTransactionStatus(id, 'settled');
+  async settleCardTransaction(id: number, ledgerTransactionId: number) {
+    return this.cardsRepository.updateCardTransactionStatus(id, 'settled', ledgerTransactionId);
   }
 }
