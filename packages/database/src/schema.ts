@@ -16,6 +16,8 @@ export const ledgerTxnTypeEnum = pgEnum('ledger_txn_type', [
   'deposit', 'withdrawal', 'transfer', 'card_settlement', 'card_auth', 'reversal', 'refund', 'fee', 'adjustment',
 ]);
 export const ledgerTxnStatusEnum = pgEnum('ledger_txn_status', ['pending', 'posted', 'reversed']);
+export const holdStatusEnum = pgEnum('hold_status', ['active', 'released', 'captured', 'expired']);
+export const holdTypeEnum = pgEnum('hold_type', ['card_auth', 'manual']);
 
 // Users table
 export const users = pgTable('users', {
@@ -99,6 +101,23 @@ export const ledgerEntries = pgTable('ledger_entries', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Holds reduce a customer account's *available* balance without moving posted funds
+// (e.g. a card authorization). Released/expired holds free the funds; a captured hold has
+// been turned into a posted settlement.
+export const holds = pgTable('holds', {
+  id: serial('id').primaryKey(),
+  ledgerAccountId: integer('ledger_account_id').notNull().references(() => ledgerAccounts.id, { onDelete: 'restrict' }),
+  amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(), // always positive
+  status: holdStatusEnum('status').notNull().default('active'),
+  type: holdTypeEnum('type').notNull(),
+  externalRef: varchar('external_ref', { length: 255 }).unique(), // e.g. card auth token
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  releasedAt: timestamp('released_at', { withTimezone: true }),
+  metadata: text('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Cards ─────────────────────────────────────────────────────────────────
 
 export const cards = pgTable('cards', {
@@ -167,6 +186,10 @@ export const ledgerEntriesRelations = relations(ledgerEntries, ({ one }) => ({
   ledgerAccount: one(ledgerAccounts, { fields: [ledgerEntries.ledgerAccountId], references: [ledgerAccounts.id] }),
 }));
 
+export const holdsRelations = relations(holds, ({ one }) => ({
+  ledgerAccount: one(ledgerAccounts, { fields: [holds.ledgerAccountId], references: [ledgerAccounts.id] }),
+}));
+
 export const cardsRelations = relations(cards, ({ one, many }) => ({
   account: one(accounts, { fields: [cards.accountId], references: [accounts.id] }),
   cardTransactions: many(cardTransactions),
@@ -189,6 +212,8 @@ export type LedgerTransaction = typeof ledgerTransactions.$inferSelect;
 export type NewLedgerTransaction = typeof ledgerTransactions.$inferInsert;
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;
 export type NewLedgerEntry = typeof ledgerEntries.$inferInsert;
+export type Hold = typeof holds.$inferSelect;
+export type NewHold = typeof holds.$inferInsert;
 export type Card = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
 export type CardTransaction = typeof cardTransactions.$inferSelect;

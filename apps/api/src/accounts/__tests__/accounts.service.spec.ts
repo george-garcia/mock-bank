@@ -7,7 +7,7 @@ import { LedgerService } from '../../ledger/ledger.service';
 describe('AccountsService', () => {
   let service: AccountsService;
   let repository: jest.Mocked<Pick<AccountsRepository, 'create' | 'findById' | 'findByUserId'>>;
-  let ledger: jest.Mocked<Pick<LedgerService, 'openCustomerAccount' | 'getBalance' | 'getBalances'>>;
+  let ledger: jest.Mocked<Pick<LedgerService, 'openCustomerAccount' | 'getBalances'>>;
 
   const mockAccount = {
     id: 1,
@@ -20,7 +20,7 @@ describe('AccountsService', () => {
 
   beforeEach(async () => {
     repository = { create: jest.fn(), findById: jest.fn(), findByUserId: jest.fn() };
-    ledger = { openCustomerAccount: jest.fn(), getBalance: jest.fn(), getBalances: jest.fn() };
+    ledger = { openCustomerAccount: jest.fn(), getBalances: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -46,13 +46,13 @@ describe('AccountsService', () => {
   });
 
   describe('findOne', () => {
-    it('returns the account with its ledger balance when owned by the user', async () => {
+    it('returns the account with its posted + available balance when owned by the user', async () => {
       repository.findById.mockResolvedValue(mockAccount);
-      ledger.getBalance.mockResolvedValue('150.00');
+      ledger.getBalances.mockResolvedValue(new Map([[1, { balance: '150.00', available: '120.00' }]]));
 
       const result = await service.findOne(1, 1);
 
-      expect(result).toMatchObject({ id: 1, balance: '150.00' });
+      expect(result).toMatchObject({ id: 1, balance: '150.00', availableBalance: '120.00' });
     });
 
     it('throws NotFoundException if the account does not exist', async () => {
@@ -67,14 +67,19 @@ describe('AccountsService', () => {
   });
 
   describe('findAllByUser', () => {
-    it('attaches each ledger balance', async () => {
+    it('attaches each posted + available balance', async () => {
       repository.findByUserId.mockResolvedValue([mockAccount, { ...mockAccount, id: 2 }]);
-      ledger.getBalances.mockResolvedValue(new Map([[1, '10.00'], [2, '20.00']]));
+      ledger.getBalances.mockResolvedValue(
+        new Map([
+          [1, { balance: '10.00', available: '10.00' }],
+          [2, { balance: '20.00', available: '5.00' }],
+        ]),
+      );
 
       const result = await service.findAllByUser(1);
 
       expect(result[0].balance).toBe('10.00');
-      expect(result[1].balance).toBe('20.00');
+      expect(result[1]).toMatchObject({ balance: '20.00', availableBalance: '5.00' });
     });
   });
 });

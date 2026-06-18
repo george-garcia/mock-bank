@@ -68,28 +68,49 @@ export class LithicWebhookService {
       return { approved: false, reason: 'card_not_found' };
     }
 
-    const account = await this.cardsService.getAccountForCard(card.id);
-    const balance = parseFloat(account.balance);
-    const amount = Math.abs(payload.amount);
-
-    if (balance < amount) {
-      this.logger.warn(`Declining auth: insufficient funds (balance: ${balance}, amount: ${amount})`);
-      return { approved: false, reason: 'insufficient_funds' };
-    }
-
-    await this.cardsService.recordCardTransaction(card.id, {
+    const amount = Math.abs(payload.amount).toFixed(2);
+    const baseTx = {
       lithicTransactionToken: payload.token || `auth-${Date.now()}`,
       merchantName: payload.merchant?.descriptor || 'Unknown',
       merchantMcc: payload.merchant?.mcc,
       merchantCity: payload.merchant?.city,
       merchantState: payload.merchant?.state,
       merchantCountry: payload.merchant?.country,
-      amount: amount.toFixed(2),
-      status: 'authorized',
+      amount,
       authCode: payload.authorization_code,
       metadata: JSON.stringify(payload),
-    });
+    };
 
+    // Honor a processor-side decline (fraud, velocity, etc.) and record it.
+    if (payload.result === 'DECLINED') {
+      await this.cardsService.recordCardTransaction(card.id, {
+        ...baseTx,
+        status: 'declined',
+        declinedReason: payload.declined_reason || 'declined_by_processor',
+      });
+      return { approved: false, reason: 'declined_by_processor' };
+    }
+
+    // Place an authorization hold, reserving available funds. Idempotent on the auth token.
+    try {
+      await this.ledgerService.placeHold(card.accountId, {
+        amount,
+        externalRef: `card_auth:${payload.token}`,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // auto-expire after 7 days
+        metadata: { cardId: card.id, merchant: payload.merchant?.descriptor },
+      });
+    } catch {
+      // Insufficient available funds — record the declined attempt.
+      await this.cardsService.recordCardTransaction(card.id, {
+        ...baseTx,
+        status: 'declined',
+        declinedReason: 'insufficient_funds',
+      });
+      this.logger.warn(`Declining auth: insufficient available funds for card ${card.id}`);
+      return { approved: false, reason: 'insufficient_funds' };
+    }
+
+    await this.cardsService.recordCardTransaction(card.id, { ...baseTx, status: 'authorized' });
     this.logger.log(`Approved authorization for ${amount} at ${payload.merchant?.descriptor}`);
     return { approved: true };
   }
@@ -111,10 +132,17 @@ export class LithicWebhookService {
       return { processed: false };
     }
 
+    // Capture (release) the authorization hold so it no longer reduces available balance.
+    await this.ledgerService.captureHold(`card_auth:${payload.token}`);
+
+    // The settlement amount may differ from the authorized amount (partial / over-settlement);
+    // post the actual settled amount.
+    const settleAmount = payload.amount !== undefined ? Math.abs(payload.amount).toFixed(2) : cardTx.amount;
+
     // Post the settlement to the ledger. The settlement token is the idempotency key, so a
     // replayed webhook will not double-post.
     const result = await this.ledgerService.cardSettlement(card.accountId, {
-      amount: cardTx.amount,
+      amount: settleAmount,
       description: `Card purchase: ${cardTx.merchantName}`,
       idempotencyKey: `card_settlement:${payload.token}`,
     });
@@ -122,7 +150,7 @@ export class LithicWebhookService {
     // Link the card transaction to its ledger journal and mark it settled.
     await this.cardsService.settleCardTransaction(cardTx.id, result.transaction.id);
 
-    this.logger.log(`Settled transaction: ${payload.token}`);
+    this.logger.log(`Settled ${settleAmount} (${payload.token})`);
     return { processed: true };
   }
 

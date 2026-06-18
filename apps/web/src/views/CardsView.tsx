@@ -166,22 +166,20 @@ export function CardsView({
                     </Badge>
                   </div>
 
-                  {card.cardNumber && (
-                    <div className="mb-6 p-4 bg-gradient-to-br from-black to-surface-highlight border border-white/10 rounded-xl relative overflow-hidden shadow-inner">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-accent/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-                      <p className="text-white font-mono text-xl tracking-[0.2em] relative z-10 drop-shadow-md">
-                        {card.cardNumber.match(/.{1,4}/g)?.join(' ') || card.cardNumber}
+                  <div className="mb-6 p-4 bg-gradient-to-br from-black to-surface-highlight border border-white/10 rounded-xl relative overflow-hidden shadow-inner">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-accent/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                    <p className="text-white font-mono text-xl tracking-[0.2em] relative z-10 drop-shadow-md">
+                      •••• •••• •••• {card.lastFour}
+                    </p>
+                    <div className="flex justify-between mt-4 relative z-10">
+                      <p className="text-content-muted text-xs font-semibold tracking-widest uppercase">
+                        <span className="opacity-50 mr-1">EXP</span> {card.expiryMonth}/{card.expiryYear}
                       </p>
-                      <div className="flex justify-between mt-4 relative z-10">
-                        <p className="text-content-muted text-xs font-semibold tracking-widest uppercase">
-                          <span className="opacity-50 mr-1">EXP</span> {card.expiryMonth}/{card.expiryYear}
-                        </p>
-                        <p className="text-content-muted text-xs font-semibold tracking-widest uppercase">
-                          <span className="opacity-50 mr-1">CVV</span> ***
-                        </p>
-                      </div>
+                      <p className="text-content-muted text-xs font-semibold tracking-widest uppercase">
+                        <span className="opacity-50 mr-1">CVV</span> ***
+                      </p>
                     </div>
-                  )}
+                  </div>
 
                   <div className="flex flex-wrap gap-2 pt-4 border-t border-white/5">
                     {card.status === 'active' && (

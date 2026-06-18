@@ -5,6 +5,7 @@ export type {
   LedgerAccount, NewLedgerAccount,
   LedgerTransaction, NewLedgerTransaction,
   LedgerEntry, NewLedgerEntry,
+  Hold, NewHold,
   Card, NewCard,
   CardTransaction, NewCardTransaction,
   OtpCode, NewOtpCode,

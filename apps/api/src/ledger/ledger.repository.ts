@@ -1,11 +1,13 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { eq, inArray, desc } from 'drizzle-orm';
+import { eq, inArray, desc, and, sum } from 'drizzle-orm';
 import {
   db,
   ledgerAccounts,
   ledgerTransactions,
   ledgerEntries,
+  holds,
   LedgerAccount,
+  Hold,
 } from '@mock-bank/database';
 
 export type LedgerSide = 'debit' | 'credit';
@@ -59,6 +61,82 @@ export class LedgerRepository {
     if (accountIds.length === 0) return new Map();
     const rows = await db.select().from(ledgerAccounts).where(inArray(ledgerAccounts.accountId, accountIds));
     return new Map(rows.filter((r) => r.accountId !== null).map((r) => [r.accountId as number, r.balanceMinor]));
+  }
+
+  /** accountId → active hold total (minor units). */
+  async activeHoldsForAccounts(accountIds: number[]): Promise<Map<number, number>> {
+    if (accountIds.length === 0) return new Map();
+    const rows = await db
+      .select({ accountId: ledgerAccounts.accountId, total: sum(holds.amountMinor) })
+      .from(holds)
+      .innerJoin(ledgerAccounts, eq(ledgerAccounts.id, holds.ledgerAccountId))
+      .where(and(inArray(ledgerAccounts.accountId, accountIds), eq(holds.status, 'active')))
+      .groupBy(ledgerAccounts.accountId);
+    return new Map(rows.filter((r) => r.accountId !== null).map((r) => [r.accountId as number, Number(r.total ?? 0)]));
+  }
+
+  /**
+   * Place a hold against a customer account, reducing its available balance atomically.
+   * Idempotent on externalRef. Rejects if available funds are insufficient.
+   */
+  async placeHold(input: {
+    ledgerAccountId: number;
+    amountMinor: number;
+    type: 'card_auth' | 'manual';
+    externalRef?: string;
+    expiresAt?: Date;
+    metadata?: Record<string, unknown>;
+  }): Promise<Hold> {
+    if (!Number.isInteger(input.amountMinor) || input.amountMinor <= 0) {
+      throw new BadRequestException('Hold amount must be a positive integer (minor units)');
+    }
+    return db.transaction(async (tx) => {
+      const [acct] = await tx
+        .select()
+        .from(ledgerAccounts)
+        .where(eq(ledgerAccounts.id, input.ledgerAccountId))
+        .for('update');
+      if (!acct) throw new BadRequestException('Unknown ledger account');
+
+      const [{ total }] = await tx
+        .select({ total: sum(holds.amountMinor) })
+        .from(holds)
+        .where(and(eq(holds.ledgerAccountId, input.ledgerAccountId), eq(holds.status, 'active')));
+      const available = acct.balanceMinor - Number(total ?? 0);
+      if (available < input.amountMinor) {
+        throw new BadRequestException('Insufficient funds');
+      }
+
+      const inserted = await tx
+        .insert(holds)
+        .values({
+          ledgerAccountId: input.ledgerAccountId,
+          amountMinor: input.amountMinor,
+          type: input.type,
+          externalRef: input.externalRef,
+          expiresAt: input.expiresAt,
+          metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+          status: 'active',
+        })
+        .onConflictDoNothing({ target: holds.externalRef })
+        .returning();
+
+      if (inserted.length === 0 && input.externalRef) {
+        const [existing] = await tx.select().from(holds).where(eq(holds.externalRef, input.externalRef));
+        return existing;
+      }
+      return inserted[0];
+    });
+  }
+
+  /** Resolve an active hold (release/capture/expire). Idempotent: a no-op if already resolved. */
+  async resolveHold(externalRef: string, status: 'released' | 'captured' | 'expired'): Promise<Hold | null> {
+    const [hold] = await db
+      .update(holds)
+      .set({ status, releasedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(holds.externalRef, externalRef), eq(holds.status, 'active')))
+      .returning();
+    return hold ?? null;
   }
 
   async historyForAccount(accountId: number) {
@@ -135,12 +213,23 @@ export class LedgerRepository {
         newBalances.set(e.ledgerAccountId, newBalances.get(e.ledgerAccountId)! + delta);
       }
 
-      // Overdraft guard: customer liability accounts must not go negative.
+      // Overdraft guard: a customer account's *available* balance (posted − active holds)
+      // must not go negative.
       if (!input.allowNegative) {
+        const holdRows = await tx
+          .select({ id: holds.ledgerAccountId, total: sum(holds.amountMinor) })
+          .from(holds)
+          .where(and(inArray(holds.ledgerAccountId, accountIds), eq(holds.status, 'active')))
+          .groupBy(holds.ledgerAccountId);
+        const activeHolds = new Map<number, number>(holdRows.map((r) => [r.id, Number(r.total ?? 0)]));
+
         for (const id of accountIds) {
           const acct = byId.get(id)!;
-          if (acct.accountId !== null && acct.category === 'liability' && newBalances.get(id)! < 0) {
-            throw new BadRequestException('Insufficient funds');
+          if (acct.accountId !== null && acct.category === 'liability') {
+            const available = newBalances.get(id)! - (activeHolds.get(id) ?? 0);
+            if (available < 0) {
+              throw new BadRequestException('Insufficient funds');
+            }
           }
         }
       }

@@ -37,7 +37,7 @@ export class CardsService {
       spendLimitPeriod: data.spendLimitPeriod,
     });
 
-    return card;
+    return this.sanitize(card);
   }
 
   async findAllByUser(userId: number) {
@@ -53,7 +53,7 @@ export class CardsService {
       const cards = await this.cardsRepository.findByAccountId(accountId);
       allCards.push(...cards);
     }
-    return allCards;
+    return allCards.map((c) => this.sanitize(c));
   }
 
   async findOne(id: number, userId: number) {
@@ -63,7 +63,13 @@ export class CardsService {
     }
     // Verify ownership via account
     await this.accountsService.findOne(card.accountId, userId);
-    return card;
+    return this.sanitize(card);
+  }
+
+  /** Never expose the full PAN to clients — last four only (PCI). */
+  private sanitize<T extends { cardNumber?: string | null }>(card: T) {
+    const { cardNumber, ...safe } = card;
+    return safe;
   }
 
   async findByLithicToken(token: string) {

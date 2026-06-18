@@ -5,7 +5,22 @@ import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
+const WEAK_JWT_SECRETS = ['mockbank-secret-key', 'change-me-in-production', 'mockbank-dev-secret-change-in-production'];
+
+function assertSecrets() {
+  const secret = process.env.JWT_SECRET;
+  const weak = !secret || WEAK_JWT_SECRETS.includes(secret);
+  if (weak) {
+    const msg = 'JWT_SECRET is unset or a known default value';
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`[security] ${msg}. Refusing to start in production.`);
+    }
+    console.warn(`[security] WARNING: ${msg}. Set a strong JWT_SECRET — this is fatal in production.`);
+  }
+}
+
 async function bootstrap() {
+  assertSecrets();
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({

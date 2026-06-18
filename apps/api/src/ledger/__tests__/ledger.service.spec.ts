@@ -8,7 +8,8 @@ describe('LedgerService', () => {
   let repo: jest.Mocked<
     Pick<LedgerRepository,
       'customerLedgerAccountId' | 'systemLedgerAccountId' | 'createCustomerLedgerAccount' |
-      'balanceMinorForAccount' | 'balancesForAccounts' | 'historyForAccount' | 'post'>
+      'balanceMinorForAccount' | 'balancesForAccounts' | 'activeHoldsForAccounts' |
+      'historyForAccount' | 'post' | 'placeHold' | 'resolveHold'>
   >;
 
   beforeEach(async () => {
@@ -18,8 +19,11 @@ describe('LedgerService', () => {
       createCustomerLedgerAccount: jest.fn(),
       balanceMinorForAccount: jest.fn(),
       balancesForAccounts: jest.fn(),
+      activeHoldsForAccounts: jest.fn().mockResolvedValue(new Map()),
       historyForAccount: jest.fn(),
       post: jest.fn().mockResolvedValue({ transaction: { id: 99 }, entries: [], idempotentReplay: false }),
+      placeHold: jest.fn(),
+      resolveHold: jest.fn(),
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [LedgerService, { provide: LedgerRepository, useValue: repo }],
@@ -135,11 +139,37 @@ describe('LedgerService', () => {
   });
 
   describe('getBalances', () => {
-    it('formats minor balances to decimal strings', async () => {
-      repo.balancesForAccounts.mockResolvedValue(new Map([[5, 12345], [6, 0]]));
+    it('returns posted balance and available (posted − active holds)', async () => {
+      repo.balancesForAccounts.mockResolvedValue(new Map([[5, 12345], [6, 5000]]));
+      repo.activeHoldsForAccounts.mockResolvedValue(new Map([[5, 2345]]));
+
       const balances = await service.getBalances([5, 6]);
-      expect(balances.get(5)).toBe('123.45');
-      expect(balances.get(6)).toBe('0.00');
+
+      expect(balances.get(5)).toEqual({ balance: '123.45', available: '100.00' });
+      expect(balances.get(6)).toEqual({ balance: '50.00', available: '50.00' });
+    });
+  });
+
+  describe('holds', () => {
+    it('placeHold resolves the customer ledger account and reserves funds', async () => {
+      repo.customerLedgerAccountId.mockResolvedValue(10);
+      await service.placeHold(5, { amount: '40.00', externalRef: 'card_auth:tok' });
+      expect(repo.placeHold).toHaveBeenCalledWith(
+        expect.objectContaining({ ledgerAccountId: 10, amountMinor: 4000, type: 'card_auth', externalRef: 'card_auth:tok' }),
+      );
+    });
+
+    it('captureHold and releaseHold resolve the hold with the right status', async () => {
+      await service.captureHold('card_auth:tok');
+      expect(repo.resolveHold).toHaveBeenCalledWith('card_auth:tok', 'captured');
+      await service.releaseHold('card_auth:tok');
+      expect(repo.resolveHold).toHaveBeenCalledWith('card_auth:tok', 'released');
+    });
+
+    it('getAvailableBalance subtracts active holds from posted', async () => {
+      repo.balanceMinorForAccount.mockResolvedValue(10000);
+      repo.activeHoldsForAccounts.mockResolvedValue(new Map([[5, 2500]]));
+      expect(await service.getAvailableBalance(5)).toBe('75.00');
     });
   });
 });

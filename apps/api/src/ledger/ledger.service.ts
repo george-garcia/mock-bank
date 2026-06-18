@@ -28,10 +28,45 @@ export class LedgerService {
     return toDecimalString(await this.repo.balanceMinorForAccount(accountId));
   }
 
-  /** accountId → decimal balance string, for a batch of accounts. */
-  async getBalances(accountIds: number[]): Promise<Map<number, string>> {
-    const minors = await this.repo.balancesForAccounts(accountIds);
-    return new Map([...minors].map(([id, minor]) => [id, toDecimalString(minor)]));
+  /** accountId → { balance (posted), available (posted − active holds) } decimal strings. */
+  async getBalances(accountIds: number[]): Promise<Map<number, { balance: string; available: string }>> {
+    const posted = await this.repo.balancesForAccounts(accountIds);
+    const heldMap = await this.repo.activeHoldsForAccounts(accountIds);
+    return new Map(
+      [...posted].map(([id, minor]) => {
+        const held = heldMap.get(id) ?? 0;
+        return [id, { balance: toDecimalString(minor), available: toDecimalString(minor - held) }];
+      }),
+    );
+  }
+
+  async getAvailableBalance(accountId: number): Promise<string> {
+    const posted = await this.repo.balanceMinorForAccount(accountId);
+    const held = (await this.repo.activeHoldsForAccounts([accountId])).get(accountId) ?? 0;
+    return toDecimalString(posted - held);
+  }
+
+  // ─── Holds (available-balance reservations) ───────────────────────────────
+
+  async placeHold(accountId: number, input: { amount: string; externalRef?: string; expiresAt?: Date; metadata?: Record<string, unknown> }) {
+    const minor = this.requirePositive(input.amount);
+    const ledgerAccountId = await this.requireCustomer(accountId);
+    return this.repo.placeHold({
+      ledgerAccountId,
+      amountMinor: minor,
+      type: 'card_auth',
+      externalRef: input.externalRef,
+      expiresAt: input.expiresAt,
+      metadata: input.metadata,
+    });
+  }
+
+  releaseHold(externalRef: string) {
+    return this.repo.resolveHold(externalRef, 'released');
+  }
+
+  captureHold(externalRef: string) {
+    return this.repo.resolveHold(externalRef, 'captured');
   }
 
   async deposit(accountId: number, input: MoveInput, type: 'deposit' = 'deposit') {

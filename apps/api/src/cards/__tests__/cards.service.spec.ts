@@ -87,7 +87,8 @@ describe('CardsService', () => {
 
       const result = await service.createCard(1, 1, { memo: 'Test card' });
 
-      expect(result).toEqual(mockCard);
+      expect(result).not.toHaveProperty('cardNumber'); // PCI: full PAN never returned
+      expect(result).toMatchObject({ id: 1, lastFour: '1234' });
       expect(mockLithicService.createCard).toHaveBeenCalled();
     });
 
@@ -105,7 +106,9 @@ describe('CardsService', () => {
 
       const result = await service.findAllByUser(1);
 
-      expect(result).toEqual([mockCard, mockCard]);
+      expect(result).toHaveLength(2);
+      expect(result[0]).not.toHaveProperty('cardNumber');
+      expect(result[0]).toMatchObject({ id: 1, lastFour: '1234' });
     });
 
     it('should return empty array if no accounts', async () => {
@@ -124,7 +127,8 @@ describe('CardsService', () => {
 
       const result = await service.findOne(1, 1);
 
-      expect(result).toEqual(mockCard);
+      expect(result).not.toHaveProperty('cardNumber');
+      expect(result).toMatchObject({ id: 1, lastFour: '1234' });
     });
 
     it('should throw if card not found', async () => {
