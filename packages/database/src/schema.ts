@@ -152,6 +152,22 @@ export const sessions = pgTable('sessions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Immutable account statements for a period, generated from (and reconcilable against) the
+// ledger. The line snapshot is stored so the document never changes after generation.
+export const statements = pgTable('statements', {
+  id: serial('id').primaryKey(),
+  accountId: integer('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+  periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+  openingBalanceMinor: bigint('opening_balance_minor', { mode: 'number' }).notNull(),
+  closingBalanceMinor: bigint('closing_balance_minor', { mode: 'number' }).notNull(),
+  totalCreditsMinor: bigint('total_credits_minor', { mode: 'number' }).notNull(),
+  totalDebitsMinor: bigint('total_debits_minor', { mode: 'number' }).notNull(),
+  transactionCount: integer('transaction_count').notNull(),
+  lines: text('lines').notNull(), // JSON snapshot of the statement lines
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Append-only audit trail of security- and money-significant events.
 export const auditLogs = pgTable('audit_logs', {
   id: serial('id').primaryKey(),
@@ -267,6 +283,8 @@ export type PendingDeposit = typeof pendingDeposits.$inferSelect;
 export type NewPendingDeposit = typeof pendingDeposits.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
+export type Statement = typeof statements.$inferSelect;
+export type NewStatement = typeof statements.$inferInsert;
 export type Card = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
 export type CardTransaction = typeof cardTransactions.$inferSelect;

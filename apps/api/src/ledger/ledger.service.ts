@@ -177,6 +177,32 @@ export class LedgerService {
     }));
   }
 
+  /** Compute statement figures for an account over [start, end) from the immutable ledger. */
+  async statementData(accountId: number, start: Date, end: Date) {
+    const ledgerAccountId = await this.requireCustomer(accountId);
+    const openingMinor = await this.repo.signedSumBefore(ledgerAccountId, start);
+    const rows = await this.repo.entriesBetween(ledgerAccountId, start, end);
+
+    let totalCreditsMinor = 0;
+    let totalDebitsMinor = 0;
+    const lines = rows.map((r) => {
+      if (r.direction === 'credit') totalCreditsMinor += r.amountMinor;
+      else totalDebitsMinor += r.amountMinor;
+      const signed = r.direction === 'credit' ? r.amountMinor : -r.amountMinor;
+      return {
+        transactionId: r.transactionId,
+        date: r.createdAt,
+        type: r.type,
+        description: r.description,
+        amount: toDecimalString(signed),
+        status: r.status,
+      };
+    });
+
+    const closingMinor = openingMinor + totalCreditsMinor - totalDebitsMinor;
+    return { openingMinor, closingMinor, totalCreditsMinor, totalDebitsMinor, lines };
+  }
+
   private requirePositive(amount: string): number {
     let minor: number;
     try {

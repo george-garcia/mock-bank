@@ -9,7 +9,8 @@ describe('LedgerService', () => {
     Pick<LedgerRepository,
       'customerLedgerAccountId' | 'systemLedgerAccountId' | 'createCustomerLedgerAccount' |
       'balanceMinorForAccount' | 'balancesForAccounts' | 'activeHoldsForAccounts' |
-      'historyForAccount' | 'post' | 'placeHold' | 'resolveHold' | 'reverse' | 'expireHolds'>
+      'historyForAccount' | 'post' | 'placeHold' | 'resolveHold' | 'reverse' | 'expireHolds' |
+      'signedSumBefore' | 'entriesBetween'>
   >;
 
   beforeEach(async () => {
@@ -26,6 +27,8 @@ describe('LedgerService', () => {
       resolveHold: jest.fn(),
       reverse: jest.fn().mockResolvedValue({ transaction: { id: 100 }, entries: [], idempotentReplay: false }),
       expireHolds: jest.fn().mockResolvedValue(2),
+      signedSumBefore: jest.fn(),
+      entriesBetween: jest.fn(),
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [LedgerService, { provide: LedgerRepository, useValue: repo }],
@@ -169,6 +172,26 @@ describe('LedgerService', () => {
 
       expect(history[0].amount).toBe('50.00');
       expect(history[1].amount).toBe('-20.00');
+    });
+  });
+
+  describe('statementData', () => {
+    it('computes opening/closing balances and credit/debit totals from the ledger', async () => {
+      repo.customerLedgerAccountId.mockResolvedValue(10);
+      repo.signedSumBefore.mockResolvedValue(100000); // $1000 opening
+      repo.entriesBetween.mockResolvedValue([
+        { id: 1, direction: 'credit', amountMinor: 50000, createdAt: new Date(), transactionId: 1, type: 'deposit', status: 'posted', description: 'pay' },
+        { id: 2, direction: 'debit', amountMinor: 20000, createdAt: new Date(), transactionId: 2, type: 'withdrawal', status: 'posted', description: 'atm' },
+      ] as any);
+
+      const data = await service.statementData(5, new Date('2026-05-01'), new Date('2026-06-01'));
+
+      expect(data.openingMinor).toBe(100000);
+      expect(data.totalCreditsMinor).toBe(50000);
+      expect(data.totalDebitsMinor).toBe(20000);
+      expect(data.closingMinor).toBe(130000); // 1000 + 500 - 200 = 1300
+      expect(data.lines[0].amount).toBe('500.00');
+      expect(data.lines[1].amount).toBe('-200.00');
     });
   });
 

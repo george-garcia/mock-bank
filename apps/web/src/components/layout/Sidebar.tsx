@@ -4,6 +4,7 @@ import {
   Wallet,
   CreditCard,
   ArrowLeftRight,
+  FileText,
   Settings,
   LogOut,
 } from 'lucide-react';
@@ -14,6 +15,7 @@ const navItems = [
   { to: '/accounts', icon: Wallet, label: 'Accounts' },
   { to: '/cards', icon: CreditCard, label: 'Cards' },
   { to: '/transactions', icon: ArrowLeftRight, label: 'Transactions' },
+  { to: '/statements', icon: FileText, label: 'Statements' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { eq, inArray, desc, and, sum, lt, isNotNull } from 'drizzle-orm';
+import { eq, inArray, desc, asc, and, sum, lt, gte, isNotNull } from 'drizzle-orm';
 import {
   db,
   ledgerAccounts,
@@ -159,6 +159,40 @@ export class LedgerRepository {
       .innerJoin(ledgerTransactions, eq(ledgerEntries.transactionId, ledgerTransactions.id))
       .where(eq(ledgerEntries.ledgerAccountId, laId))
       .orderBy(desc(ledgerEntries.createdAt));
+  }
+
+  /** Signed balance (credit − debit) of a ledger account from all entries before `before`. */
+  async signedSumBefore(ledgerAccountId: number, before: Date): Promise<number> {
+    const [row] = await db
+      .select({
+        credit: sum(/* credit */ ledgerEntries.amountMinor),
+      })
+      .from(ledgerEntries)
+      .where(and(eq(ledgerEntries.ledgerAccountId, ledgerAccountId), lt(ledgerEntries.createdAt, before), eq(ledgerEntries.direction, 'credit')));
+    const [debitRow] = await db
+      .select({ debit: sum(ledgerEntries.amountMinor) })
+      .from(ledgerEntries)
+      .where(and(eq(ledgerEntries.ledgerAccountId, ledgerAccountId), lt(ledgerEntries.createdAt, before), eq(ledgerEntries.direction, 'debit')));
+    return Number(row?.credit ?? 0) - Number(debitRow?.debit ?? 0);
+  }
+
+  /** Entries (with journal info) for a ledger account in [start, end), oldest first. */
+  async entriesBetween(ledgerAccountId: number, start: Date, end: Date) {
+    return db
+      .select({
+        id: ledgerEntries.id,
+        direction: ledgerEntries.direction,
+        amountMinor: ledgerEntries.amountMinor,
+        createdAt: ledgerEntries.createdAt,
+        transactionId: ledgerTransactions.id,
+        type: ledgerTransactions.type,
+        status: ledgerTransactions.status,
+        description: ledgerTransactions.description,
+      })
+      .from(ledgerEntries)
+      .innerJoin(ledgerTransactions, eq(ledgerEntries.transactionId, ledgerTransactions.id))
+      .where(and(eq(ledgerEntries.ledgerAccountId, ledgerAccountId), gte(ledgerEntries.createdAt, start), lt(ledgerEntries.createdAt, end)))
+      .orderBy(asc(ledgerEntries.createdAt));
   }
 
   /**

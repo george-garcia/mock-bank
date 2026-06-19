@@ -47,5 +47,5 @@ coverage/
 # Turbo
 .turbo/
 
-# Claude local (machine-specific) settings
-.claude/settings.local.json
+# Claude Code tool settings (local/machine state)
+.claude/

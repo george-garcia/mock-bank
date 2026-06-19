@@ -11,6 +11,7 @@ import { UsersModule } from './users/users.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { StatementsModule } from './statements/statements.module';
 import { CardsModule } from './cards/cards.module';
 import { LithicModule } from './lithic/lithic.module';
 import { LithicWebhookModule } from './lithic/lithic-webhook.module';
@@ -38,6 +39,7 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger.midd
     LedgerModule,
     AccountsModule,
     TransactionsModule,
+    StatementsModule,
     CardsModule,
     LithicModule,
     LithicWebhookModule,

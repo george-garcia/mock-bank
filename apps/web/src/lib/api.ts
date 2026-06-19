@@ -110,6 +110,14 @@ export const withdrawalsApi = {
     unwrap(api.post('/withdrawals', data)),
 };
 
+// Statements API
+export const statementsApi = {
+  list: (accountId: number) => unwrap(api.get('/statements', { params: { accountId } })),
+  generate: (data: { accountId: number; periodStart: string; periodEnd: string }) =>
+    unwrap(api.post('/statements', data)),
+  get: (id: number) => unwrap(api.get(`/statements/${id}`)),
+};
+
 // Transfers API
 export const transfersApi = {
   create: (data: { fromAccountId: number; toAccountId: number; amount: string; description?: string }) =>
