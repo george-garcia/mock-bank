@@ -7,9 +7,19 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
+// Staff (admin panel) roles — separate identity domain from bank customers.
+export type StaffRole = 'admin' | 'auditor';
+
 export interface JwtPayload {
   sub: number; // user id
   email: string;
+}
+
+export interface StaffJwtPayload {
+  sub: number; // staff user id
+  email: string;
+  role: StaffRole;
+  typ: 'staff';
 }
 
 export interface LithicWebhookEvent {

@@ -50,6 +50,13 @@
       "when": 1781841855050,
       "tag": "0006_last_groot",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781852898621,
+      "tag": "0007_nifty_jubilee",
+      "breakpoints": true
     }
   ]
 }

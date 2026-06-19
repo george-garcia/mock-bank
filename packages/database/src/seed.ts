@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import bcryptjs from 'bcryptjs';
 import { eq } from 'drizzle-orm';
-import { users, accounts, ledgerAccounts, ledgerTransactions, ledgerEntries } from './schema';
+import { users, accounts, ledgerAccounts, ledgerTransactions, ledgerEntries, staffUsers } from './schema';
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://mockbank:mockbank_dev@localhost:5432/mockbank';
 
@@ -34,6 +34,7 @@ async function seed() {
   console.log(`Created ${gl.length} internal GL accounts`);
 
   const passwordHash = await bcryptjs.hash('password123', 10);
+  // Bank customers (mock-bank front-end).
   const testUsers = await db
     .insert(users)
     .values([
@@ -41,7 +42,17 @@ async function seed() {
       { email: 'bob@example.com', passwordHash, firstName: 'Bob', lastName: 'Brown' },
     ])
     .returning();
-  console.log(`Created ${testUsers.length} users`);
+  console.log(`Created ${testUsers.length} customers`);
+
+  // Staff (admin panel) — a completely separate identity domain.
+  const staff = await db
+    .insert(staffUsers)
+    .values([
+      { email: 'admin@bank.internal', passwordHash, firstName: 'Avery', lastName: 'Admin', role: 'admin' },
+      { email: 'support@bank.internal', passwordHash, firstName: 'Sam', lastName: 'Support', role: 'auditor' },
+    ])
+    .returning();
+  console.log(`Created ${staff.length} staff users`);
 
   // Customer accounts with their opening balances.
   const seedAccounts = [
@@ -95,9 +106,12 @@ async function seed() {
   console.log(`Created ${seedAccounts.length} customer accounts with opening balances`);
 
   console.log('\nSeed data created successfully!');
-  console.log('Login credentials:');
+  console.log('Bank customers (mock-bank app):');
   console.log('  Alice: alice@example.com / password123');
-  console.log('  Bob: bob@example.com / password123');
+  console.log('  Bob:   bob@example.com / password123');
+  console.log('Staff (admin panel — separate login):');
+  console.log('  Admin:   admin@bank.internal / password123  (engineer)');
+  console.log('  Support: support@bank.internal / password123  (customer service)');
 
   await client.end();
 }

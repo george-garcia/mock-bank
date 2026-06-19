@@ -23,6 +23,7 @@ export class WithdrawalsService {
     });
 
     await this.auditService.record({
+      actorType: 'customer',
       actorUserId: userId,
       action: 'money.withdrawal',
       targetType: 'account',

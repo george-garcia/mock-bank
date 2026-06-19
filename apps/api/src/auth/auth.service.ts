@@ -33,7 +33,7 @@ export class AuthService {
     const passwordHash = await bcryptjs.hash(dto.password, 10);
     const user = await this.usersService.create({ ...dto, passwordHash });
 
-    await this.auditService.record({ actorUserId: user.id, action: 'auth.register', ...this.ctxMeta(ctx) });
+    await this.auditService.record({ actorType: 'customer', actorUserId: user.id, action: 'auth.register', ...this.ctxMeta(ctx) });
     const session = await this.sessionService.issueForUser(user, ctx);
     return { user: session.user, session };
   }
@@ -41,13 +41,14 @@ export class AuthService {
   async login(dto: LoginDto, ctx: RequestContext = {}) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
-      await this.auditService.record({ action: 'auth.login_failed', metadata: { email: dto.email, reason: 'unknown_user' } });
+      await this.auditService.record({ actorType: 'customer', action: 'auth.login_failed', metadata: { email: dto.email, reason: 'unknown_user' } });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     // Reject while the account is locked from prior failed attempts.
     if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
       await this.auditService.record({
+        actorType: 'customer',
         actorUserId: user.id,
         action: 'auth.login_blocked',
         metadata: { reason: 'account_locked', lockedUntil: user.lockedUntil.toISOString() },
@@ -64,6 +65,7 @@ export class AuthService {
         lockedUntil: locked ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
       });
       await this.auditService.record({
+        actorType: 'customer',
         actorUserId: user.id,
         action: locked ? 'auth.account_locked' : 'auth.login_failed',
         metadata: { reason: 'bad_password', attempts },
@@ -78,11 +80,11 @@ export class AuthService {
 
     // When 2FA is enabled, withhold the session and issue a challenge instead.
     if (user.twoFactorMethod !== 'none') {
-      await this.auditService.record({ actorUserId: user.id, action: 'auth.login_2fa_challenge' });
+      await this.auditService.record({ actorType: 'customer', actorUserId: user.id, action: 'auth.login_2fa_challenge' });
       return this.twoFactorService.issueLoginChallenge(user);
     }
 
-    await this.auditService.record({ actorUserId: user.id, action: 'auth.login', ...this.ctxMeta(ctx) });
+    await this.auditService.record({ actorType: 'customer', actorUserId: user.id, action: 'auth.login', ...this.ctxMeta(ctx) });
     const session = await this.sessionService.issueForUser(user, ctx);
     return { user: session.user, session };
   }

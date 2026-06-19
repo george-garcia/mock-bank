@@ -32,6 +32,7 @@ export class TransfersService {
     });
 
     await this.auditService.record({
+      actorType: 'customer',
       actorUserId: userId,
       action: 'money.transfer',
       targetType: 'account',

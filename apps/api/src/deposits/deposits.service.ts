@@ -44,6 +44,7 @@ export class DepositsService {
         idempotencyKey,
       });
       await this.auditService.record({
+        actorType: 'customer',
         actorUserId: userId,
         action: 'money.deposit',
         targetType: 'account',
@@ -72,6 +73,7 @@ export class DepositsService {
     });
 
     await this.auditService.record({
+      actorType: 'customer',
       actorUserId: userId,
       action: 'money.deposit_initiated',
       targetType: 'account',

@@ -8,6 +8,7 @@ export const cardStatusEnum = pgEnum('card_status', ['active', 'frozen', 'cancel
 export const cardTransactionStatusEnum = pgEnum('card_transaction_status', ['authorized', 'declined', 'settled', 'voided']);
 export const twoFactorMethodEnum = pgEnum('two_factor_method', ['none', 'email', 'totp']);
 export const otpPurposeEnum = pgEnum('otp_purpose', ['login', 'enable']);
+export const staffRoleEnum = pgEnum('staff_role', ['admin', 'auditor']);
 
 // Double-entry ledger enums
 export const ledgerAccountCategoryEnum = pgEnum('ledger_account_category', ['asset', 'liability', 'equity', 'revenue', 'expense']);
@@ -152,6 +153,34 @@ export const sessions = pgTable('sessions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Staff users for the admin panel — a separate identity domain from bank customers.
+// Created and authenticated entirely independently of the `users` table.
+export const staffUsers = pgTable('staff_users', {
+  id: serial('id').primaryKey(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  firstName: varchar('first_name', { length: 100 }).notNull(),
+  lastName: varchar('last_name', { length: 100 }).notNull(),
+  role: staffRoleEnum('role').notNull().default('auditor'),
+  failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Refresh-token sessions for staff (admin panel), separate from customer sessions.
+export const staffSessions = pgTable('staff_sessions', {
+  id: serial('id').primaryKey(),
+  staffUserId: integer('staff_user_id').notNull().references(() => staffUsers.id, { onDelete: 'cascade' }),
+  refreshTokenHash: varchar('refresh_token_hash', { length: 64 }).notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  replacedById: integer('replaced_by_id'),
+  userAgent: varchar('user_agent', { length: 255 }),
+  ip: varchar('ip', { length: 64 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Immutable account statements for a period, generated from (and reconcilable against) the
 // ledger. The line snapshot is stored so the document never changes after generation.
 export const statements = pgTable('statements', {
@@ -168,10 +197,13 @@ export const statements = pgTable('statements', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Append-only audit trail of security- and money-significant events.
+// Append-only audit trail of security- and money-significant events. The actor may be a
+// bank customer, a staff member, or the system — so actorUserId is a plain id paired with
+// actorType (no single FK, since customers and staff live in different tables).
 export const auditLogs = pgTable('audit_logs', {
   id: serial('id').primaryKey(),
-  actorUserId: integer('actor_user_id').references(() => users.id, { onDelete: 'set null' }), // null = system/webhook
+  actorType: varchar('actor_type', { length: 16 }).notNull().default('system'), // 'customer' | 'staff' | 'system'
+  actorUserId: integer('actor_user_id'),
   action: varchar('action', { length: 100 }).notNull(), // e.g. 'money.deposit', 'auth.login', 'card.refund'
   targetType: varchar('target_type', { length: 50 }),
   targetId: varchar('target_id', { length: 64 }),
@@ -283,6 +315,10 @@ export type PendingDeposit = typeof pendingDeposits.$inferSelect;
 export type NewPendingDeposit = typeof pendingDeposits.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
+export type StaffUser = typeof staffUsers.$inferSelect;
+export type NewStaffUser = typeof staffUsers.$inferInsert;
+export type StaffSession = typeof staffSessions.$inferSelect;
+export type NewStaffSession = typeof staffSessions.$inferInsert;
 export type Statement = typeof statements.$inferSelect;
 export type NewStatement = typeof statements.$inferInsert;
 export type Card = typeof cards.$inferSelect;

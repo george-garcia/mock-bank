@@ -193,5 +193,6 @@ describe('AuthService', () => {
       await expect(service.login({ email: 'test@example.com', password: 'password123' })).rejects.toThrow(UnauthorizedException);
       expect(bcryptjs.compare).not.toHaveBeenCalled();
     });
+
   });
 });

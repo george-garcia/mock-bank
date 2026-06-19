@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { eq, inArray, desc, asc, and, sum, lt, gte, isNotNull } from 'drizzle-orm';
 import {
   db,
+  accounts,
   ledgerAccounts,
   ledgerTransactions,
   ledgerEntries,
@@ -99,6 +100,13 @@ export class LedgerRepository {
         .where(eq(ledgerAccounts.id, input.ledgerAccountId))
         .for('update');
       if (!acct) throw new BadRequestException('Unknown ledger account');
+
+      // A frozen or closed account cannot authorize new holds.
+      if (acct.accountId !== null) {
+        const [a] = await tx.select({ status: accounts.status }).from(accounts).where(eq(accounts.id, acct.accountId));
+        if (a?.status === 'closed') throw new BadRequestException('Account is closed');
+        if (a?.status === 'frozen') throw new BadRequestException('Account is frozen');
+      }
 
       const [{ total }] = await tx
         .select({ total: sum(holds.amountMinor) })
@@ -290,6 +298,21 @@ export class LedgerRepository {
         throw new BadRequestException('Unknown ledger account in journal');
       }
       const byId = new Map<number, LedgerAccount>((locked as LedgerAccount[]).map((a) => [a.id, a]));
+
+      // Account-status enforcement: a closed account blocks all activity; a frozen account
+      // blocks debits (money out) but still accepts credits (e.g. refunds, reversals).
+      const customerAccountIds = [...byId.values()].filter((a) => a.accountId !== null).map((a) => a.accountId as number);
+      if (customerAccountIds.length > 0) {
+        const acctRows = await tx.select({ id: accounts.id, status: accounts.status }).from(accounts).where(inArray(accounts.id, customerAccountIds));
+        const statusByAccountId = new Map(acctRows.map((r) => [r.id, r.status]));
+        for (const e of input.entries) {
+          const la = byId.get(e.ledgerAccountId)!;
+          if (la.accountId === null) continue;
+          const status = statusByAccountId.get(la.accountId);
+          if (status === 'closed') throw new BadRequestException('Account is closed');
+          if (status === 'frozen' && e.direction === 'debit') throw new BadRequestException('Account is frozen');
+        }
+      }
 
       // Compute resulting balances (entry in the account's normal side increases it).
       const newBalances = new Map<number, number>(accountIds.map((id) => [id, byId.get(id)!.balanceMinor]));
