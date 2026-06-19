@@ -8,6 +8,7 @@ import * as bcryptjs from 'bcryptjs';
 import { TwoFactorService } from '../two-factor.service';
 import { UsersService } from '../../users/users.service';
 import { EmailService } from '../../email/email.service';
+import { SessionService } from '../../session/session.service';
 import { TwoFactorRepository } from '../two-factor.repository';
 
 jest.mock('bcryptjs');
@@ -22,6 +23,7 @@ describe('TwoFactorService', () => {
     Pick<TwoFactorRepository, 'create' | 'findActive' | 'incrementAttempts' | 'markConsumed' | 'consumeOutstanding'>
   >;
   let jwtService: jest.Mocked<Pick<JwtService, 'sign' | 'verify'>>;
+  let sessionService: { issueForUser: jest.Mock };
 
   const baseUser = {
     id: 1,
@@ -51,12 +53,22 @@ describe('TwoFactorService', () => {
       consumeOutstanding: jest.fn(),
     };
     jwtService = { sign: jest.fn().mockReturnValue('signed-token'), verify: jest.fn() };
+    sessionService = {
+      issueForUser: jest.fn().mockResolvedValue({
+        user: { id: 1, email: 'test@example.com', firstName: 'John', lastName: 'Doe' },
+        accessToken: 'access',
+        refreshToken: 'refresh',
+        accessMaxAgeMs: 1000,
+        refreshMaxAgeMs: 2000,
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TwoFactorService,
         { provide: UsersService, useValue: usersService },
         { provide: EmailService, useValue: emailService },
+        { provide: SessionService, useValue: sessionService },
         { provide: TwoFactorRepository, useValue: repo },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: { get: (_k: string, d?: string) => d } },
@@ -224,7 +236,8 @@ describe('TwoFactorService', () => {
 
       const result = await service.completeLogin('challenge', '123456');
 
-      expect(result.token).toBe('signed-token');
+      expect(sessionService.issueForUser).toHaveBeenCalled();
+      expect(result).toHaveProperty('session');
       expect(result.user).toEqual({ id: 1, email: 'test@example.com', firstName: 'John', lastName: 'Doe' });
     });
 

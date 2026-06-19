@@ -1,15 +1,19 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import * as bcryptjs from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 import { AuditService } from '../audit/audit.service';
+import { SessionService } from '../session/session.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
+
+interface RequestContext {
+  ip?: string;
+  userAgent?: string;
+}
 
 @Injectable()
 export class AuthService {
@@ -17,36 +21,24 @@ export class AuthService {
     private usersService: UsersService,
     private twoFactorService: TwoFactorService,
     private auditService: AuditService,
-    private jwtService: JwtService,
-    private configService: ConfigService,
+    private sessionService: SessionService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, ctx: RequestContext = {}) {
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) {
       throw new ConflictException('Email already registered');
     }
 
     const passwordHash = await bcryptjs.hash(dto.password, 10);
-    const user = await this.usersService.create({
-      ...dto,
-      passwordHash,
-    });
+    const user = await this.usersService.create({ ...dto, passwordHash });
 
-    const token = this.generateToken(user.id, user.email);
-
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      },
-      token,
-    };
+    await this.auditService.record({ actorUserId: user.id, action: 'auth.register', ...this.ctxMeta(ctx) });
+    const session = await this.sessionService.issueForUser(user, ctx);
+    return { user: session.user, session };
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, ctx: RequestContext = {}) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
       await this.auditService.record({ action: 'auth.login_failed', metadata: { email: dto.email, reason: 'unknown_user' } });
@@ -84,33 +76,18 @@ export class AuthService {
       await this.usersService.update(user.id, { failedLoginAttempts: 0, lockedUntil: null });
     }
 
-    // When 2FA is enabled, withhold the session token and issue a challenge instead.
+    // When 2FA is enabled, withhold the session and issue a challenge instead.
     if (user.twoFactorMethod !== 'none') {
       await this.auditService.record({ actorUserId: user.id, action: 'auth.login_2fa_challenge' });
       return this.twoFactorService.issueLoginChallenge(user);
     }
 
-    await this.auditService.record({ actorUserId: user.id, action: 'auth.login' });
-    const token = this.generateToken(user.id, user.email);
-
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      },
-      token,
-    };
+    await this.auditService.record({ actorUserId: user.id, action: 'auth.login', ...this.ctxMeta(ctx) });
+    const session = await this.sessionService.issueForUser(user, ctx);
+    return { user: session.user, session };
   }
 
-  private generateToken(userId: number, email: string): string {
-    return this.jwtService.sign(
-      { sub: userId, email },
-      {
-        secret: this.configService.get<string>('JWT_SECRET', 'mockbank-secret-key'),
-        expiresIn: '7d',
-      },
-    );
+  private ctxMeta(ctx: RequestContext) {
+    return { ip: ctx.ip };
   }
 }

@@ -5,27 +5,38 @@ const API_BASE_URL = import.meta.env?.VITE_API_URL || 'http://localhost:3000/api
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
+  // Auth is carried by httpOnly cookies (access + refresh) — send them with every request.
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// On a 401 for a normal request, try a one-time silent refresh (rotates the session via the
+// refresh cookie) and replay the request. If refresh fails, the session is gone → go to login.
+// Auth endpoints themselves are excluded so their 401s surface to the caller.
+let refreshing: Promise<unknown> | null = null;
 
-// Handle auth errors
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+  async (error) => {
+    const original = error.config || {};
+    const isAuthCall = typeof original.url === 'string' && original.url.includes('/auth/');
+
+    if (error.response?.status === 401 && !original._retry && !isAuthCall) {
+      original._retry = true;
+      try {
+        refreshing = refreshing || api.post('/auth/refresh');
+        await refreshing;
+        refreshing = null;
+        return api(original);
+      } catch (refreshError) {
+        refreshing = null;
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+        return Promise.reject(refreshError);
+      }
     }
     return Promise.reject(error);
   }
@@ -44,6 +55,8 @@ export const authApi = {
     unwrap(api.post('/auth/register', data)),
   login: (data: { email: string; password: string }) =>
     unwrap(api.post('/auth/login', data)),
+  logout: () => api.post('/auth/logout'),
+  refresh: () => api.post('/auth/refresh'),
   profile: () => unwrap(api.get('/users/profile')),
 };
 

@@ -138,6 +138,20 @@ export const pendingDeposits = pgTable('pending_deposits', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Server-side sessions backing refresh tokens, so a session can be revoked (logout) and
+// rotated. Only the SHA-256 hash of the refresh token is stored, never the token itself.
+export const sessions = pgTable('sessions', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  refreshTokenHash: varchar('refresh_token_hash', { length: 64 }).notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  replacedById: integer('replaced_by_id'), // the session that rotated this one out
+  userAgent: varchar('user_agent', { length: 255 }),
+  ip: varchar('ip', { length: 64 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Append-only audit trail of security- and money-significant events.
 export const auditLogs = pgTable('audit_logs', {
   id: serial('id').primaryKey(),
@@ -251,6 +265,8 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type PendingDeposit = typeof pendingDeposits.$inferSelect;
 export type NewPendingDeposit = typeof pendingDeposits.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
 export type Card = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
 export type CardTransaction = typeof cardTransactions.$inferSelect;

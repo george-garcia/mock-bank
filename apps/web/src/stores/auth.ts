@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { authApi } from '../lib/api';
 
 interface User {
   id: number;
@@ -9,23 +10,27 @@ interface User {
 }
 
 interface AuthState {
-  token: string | null;
+  // The access/refresh tokens live in httpOnly cookies and are never readable by JS.
+  // We persist only the user profile for UX; the cookie is the real source of auth.
   user: User | null;
   isAuthenticated: boolean;
-  setAuth: (token: string, user: User) => void;
-  logout: () => void;
+  setAuth: (user: User) => void;
+  logout: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      token: null,
       user: null,
       isAuthenticated: false,
-      setAuth: (token, user) => set({ token, user, isAuthenticated: true }),
-      logout: () => {
-        localStorage.removeItem('token');
-        set({ token: null, user: null, isAuthenticated: false });
+      setAuth: (user) => set({ user, isAuthenticated: true }),
+      logout: async () => {
+        try {
+          await authApi.logout(); // revoke the session server-side + clear cookies
+        } catch {
+          // ignore — clear locally regardless
+        }
+        set({ user: null, isAuthenticated: false });
       },
     }),
     {

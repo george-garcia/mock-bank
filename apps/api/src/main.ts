@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import cookieParser = require('cookie-parser');
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
@@ -27,6 +28,7 @@ async function bootstrap() {
 
   // Security headers (HSTS, X-Content-Type-Options, frame/referrer policy, etc.).
   app.use(helmet());
+  app.use(cookieParser());
 
   app.enableCors({
     origin: (origin, callback) => {

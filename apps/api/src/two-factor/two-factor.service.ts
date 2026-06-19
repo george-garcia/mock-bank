@@ -13,6 +13,7 @@ import { randomInt } from 'crypto';
 import { User } from '@mock-bank/database';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
+import { SessionService } from '../session/session.service';
 import { TwoFactorRepository } from './two-factor.repository';
 
 const MAX_OTP_ATTEMPTS = 5;
@@ -35,6 +36,7 @@ export class TwoFactorService {
   constructor(
     private usersService: UsersService,
     private emailService: EmailService,
+    private sessionService: SessionService,
     private twoFactorRepository: TwoFactorRepository,
     private jwtService: JwtService,
     private configService: ConfigService,
@@ -152,22 +154,11 @@ export class TwoFactorService {
     return { requiresTwoFactor: true as const, method, challengeToken };
   }
 
-  /** Verify a login challenge and issue the real session (same shape as AuthService.login). */
-  async completeLogin(challengeToken: string, code: string) {
+  /** Verify a login challenge and issue the real session (cookies set by the controller). */
+  async completeLogin(challengeToken: string, code: string, ctx: { ip?: string; userAgent?: string } = {}) {
     const user = await this.verifyLoginChallenge(challengeToken, code);
-    const token = this.jwtService.sign(
-      { sub: user.id, email: user.email },
-      { secret: this.jwtSecret, expiresIn: '7d' },
-    );
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      },
-      token,
-    };
+    const session = await this.sessionService.issueForUser(user, ctx);
+    return { user: session.user, session };
   }
 
   /** Verify a login challenge and return the authenticated user on success. */

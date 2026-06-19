@@ -1,11 +1,13 @@
-import { Controller, Post, Get, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpCode, HttpStatus, UseGuards, Req, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { TwoFactorService } from './two-factor.service';
 import { VerifyCodeDto } from './dto/verify-code.dto';
 import { VerifyLoginDto } from './dto/verify-login.dto';
+import { setAuthCookies } from '../common/cookies';
 
 @ApiTags('Two-Factor Auth')
 @Throttle({ default: { limit: 20, ttl: 60000 } })
@@ -21,8 +23,13 @@ export class TwoFactorController {
   @ApiOperation({ summary: 'Complete a 2FA login challenge and receive a session token' })
   @ApiResponse({ status: 200, description: 'Login complete' })
   @ApiResponse({ status: 401, description: 'Invalid code or challenge' })
-  async verifyLogin(@Body() dto: VerifyLoginDto) {
-    return this.twoFactorService.completeLogin(dto.challengeToken, dto.code);
+  async verifyLogin(@Body() dto: VerifyLoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const result = await this.twoFactorService.completeLogin(dto.challengeToken, dto.code, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    setAuthCookies(res, result.session);
+    return { user: result.user };
   }
 
   // ---- Management (authenticated) ----------------------------------------

@@ -1,11 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException, ConflictException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth.service';
 import { UsersService } from '../../users/users.service';
 import { TwoFactorService } from '../../two-factor/two-factor.service';
 import { AuditService } from '../../audit/audit.service';
+import { SessionService } from '../../session/session.service';
 import * as bcryptjs from 'bcryptjs';
 
 jest.mock('bcryptjs');
@@ -13,8 +12,8 @@ jest.mock('bcryptjs');
 describe('AuthService', () => {
   let service: AuthService;
   let usersService: UsersService;
-  let jwtService: JwtService;
   let twoFactorService: TwoFactorService;
+  let sessionService: { issueForUser: jest.Mock };
 
   const mockUser = {
     id: 1,
@@ -38,14 +37,6 @@ describe('AuthService', () => {
       update: jest.fn(),
     };
 
-    const mockJwtService = {
-      sign: jest.fn().mockReturnValue('mock-jwt-token'),
-    };
-
-    const mockConfigService = {
-      get: jest.fn().mockReturnValue('test-secret'),
-    };
-
     const mockTwoFactorService = {
       issueLoginChallenge: jest.fn(),
     };
@@ -54,40 +45,34 @@ describe('AuthService', () => {
       record: jest.fn(),
     };
 
+    const mockSessionService = {
+      issueForUser: jest.fn().mockResolvedValue({
+        user: { id: 1, email: 'test@example.com', firstName: 'John', lastName: 'Doe' },
+        accessToken: 'access',
+        refreshToken: 'refresh',
+        accessMaxAgeMs: 1000,
+        refreshMaxAgeMs: 2000,
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        {
-          provide: UsersService,
-          useValue: mockUsersService,
-        },
-        {
-          provide: TwoFactorService,
-          useValue: mockTwoFactorService,
-        },
-        {
-          provide: AuditService,
-          useValue: mockAuditService,
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
-        },
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
-        },
+        { provide: UsersService, useValue: mockUsersService },
+        { provide: TwoFactorService, useValue: mockTwoFactorService },
+        { provide: AuditService, useValue: mockAuditService },
+        { provide: SessionService, useValue: mockSessionService },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
     usersService = module.get(UsersService);
-    jwtService = module.get(JwtService);
     twoFactorService = module.get(TwoFactorService);
+    sessionService = module.get(SessionService);
   });
 
   describe('register', () => {
-    it('should register a new user and return token', async () => {
+    it('should register a new user and issue a session', async () => {
       jest.spyOn(usersService, 'findByEmail').mockResolvedValue(null);
       jest.spyOn(usersService, 'create').mockResolvedValue(mockUser);
       (bcryptjs.hash as jest.Mock).mockResolvedValue('hashedpassword');
@@ -102,8 +87,8 @@ describe('AuthService', () => {
       expect(usersService.findByEmail).toHaveBeenCalledWith('test@example.com');
       expect(bcryptjs.hash).toHaveBeenCalledWith('password123', 10);
       expect(usersService.create).toHaveBeenCalled();
-      expect(jwtService.sign).toHaveBeenCalled();
-      expect(result.token).toBe('mock-jwt-token');
+      expect(sessionService.issueForUser).toHaveBeenCalled();
+      expect(result).toHaveProperty('session');
       expect(result.user).toEqual({
         id: 1,
         email: 'test@example.com',
@@ -127,7 +112,7 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('should login user and return token', async () => {
+    it('should login user and issue a session', async () => {
       jest.spyOn(usersService, 'findByEmail').mockResolvedValue(mockUser);
       (bcryptjs.compare as jest.Mock).mockResolvedValue(true);
 
@@ -138,7 +123,8 @@ describe('AuthService', () => {
 
       expect(usersService.findByEmail).toHaveBeenCalledWith('test@example.com');
       expect(bcryptjs.compare).toHaveBeenCalledWith('password123', 'hashedpassword');
-      expect(result).toHaveProperty('token', 'mock-jwt-token');
+      expect(sessionService.issueForUser).toHaveBeenCalled();
+      expect(result).toHaveProperty('session');
       expect(twoFactorService.issueLoginChallenge).not.toHaveBeenCalled();
     });
 

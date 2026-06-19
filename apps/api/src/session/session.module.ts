@@ -2,15 +2,12 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersModule } from '../users/users.module';
-import { SessionModule } from '../session/session.module';
-import { TwoFactorService } from './two-factor.service';
-import { TwoFactorController } from './two-factor.controller';
-import { TwoFactorRepository } from './two-factor.repository';
+import { SessionService } from './session.service';
+import { SessionsRepository } from './sessions.repository';
 
 @Module({
   imports: [
     UsersModule,
-    SessionModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -18,8 +15,7 @@ import { TwoFactorRepository } from './two-factor.repository';
       }),
     }),
   ],
-  providers: [TwoFactorService, TwoFactorRepository],
-  controllers: [TwoFactorController],
-  exports: [TwoFactorService],
+  providers: [SessionService, SessionsRepository],
+  exports: [SessionService],
 })
-export class TwoFactorModule {}
+export class SessionModule {}

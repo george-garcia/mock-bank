@@ -16,9 +16,9 @@ export function useLogin() {
   const [challenge, setChallenge] = useState<{ token: string; method: 'email' | 'totp' } | null>(null);
   const [code, setCode] = useState('');
 
-  const completeAuth = (token: string, user: any) => {
-    localStorage.setItem('token', token);
-    setAuth(token, user);
+  // Tokens are set as httpOnly cookies by the server; we only keep the user profile.
+  const completeAuth = (user: any) => {
+    setAuth(user);
     navigate('/');
   };
 
@@ -33,7 +33,7 @@ export function useLogin() {
           setChallenge({ token: result.challengeToken, method: result.method });
           return;
         }
-        completeAuth(result.token, result.user);
+        completeAuth(result.user);
       } else {
         const result = await authApi.register({
           email: form.email,
@@ -41,7 +41,7 @@ export function useLogin() {
           firstName: form.firstName,
           lastName: form.lastName,
         });
-        completeAuth(result.token, result.user);
+        completeAuth(result.user);
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Something went wrong');
@@ -60,7 +60,7 @@ export function useLogin() {
         challengeToken: challenge.token,
         code: code.trim(),
       });
-      completeAuth(result.token, result.user);
+      completeAuth(result.user);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid code');
     } finally {
