@@ -3,6 +3,7 @@ import { CardsService } from '../cards.service';
 import { CardsRepository } from '../cards.repository';
 import { AccountsService } from '../../accounts/accounts.service';
 import { LithicService } from '../../lithic/lithic.service';
+import { AuditService } from '../../audit/audit.service';
 import { NotFoundException } from '@nestjs/common';
 
 describe('CardsService', () => {
@@ -50,6 +51,10 @@ describe('CardsService', () => {
     updateCardState: jest.fn(),
   };
 
+  const mockAuditService = {
+    record: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,6 +62,7 @@ describe('CardsService', () => {
         { provide: CardsRepository, useValue: mockCardsRepo },
         { provide: AccountsService, useValue: mockAccountsService },
         { provide: LithicService, useValue: mockLithicService },
+        { provide: AuditService, useValue: mockAuditService },
       ],
     }).compile();
 
@@ -135,6 +141,23 @@ describe('CardsService', () => {
       mockCardsRepo.findById.mockResolvedValue(null);
 
       await expect(service.findOne(999, 1)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('revealCard', () => {
+    it('returns the full PAN and CVV to the owner', async () => {
+      mockCardsRepo.findById.mockResolvedValue({ ...mockCard, cvv: '321' });
+      mockAccountsService.findOne.mockResolvedValue({ id: 1, userId: 1 });
+
+      const result = await service.revealCard(1, 1);
+
+      expect(result).toMatchObject({ id: 1, cardNumber: '4111111111111234', cvv: '321', lastFour: '1234' });
+      expect(mockAuditService.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'card.reveal' }));
+    });
+
+    it('throws if the card is not found', async () => {
+      mockCardsRepo.findById.mockResolvedValue(null);
+      await expect(service.revealCard(999, 1)).rejects.toThrow(NotFoundException);
     });
   });
 

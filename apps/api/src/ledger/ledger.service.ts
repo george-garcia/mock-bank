@@ -151,6 +151,41 @@ export class LedgerService {
     });
   }
 
+  /**
+   * ACH-style pull initiated by a Connect partner: money leaves the customer account toward the
+   * partner (debit customer, credit the ACH clearing GL). Respects available funds (no overdraft).
+   */
+  async achDebit(accountId: number, input: MoveInput) {
+    const minor = this.requirePositive(input.amount);
+    const customer = await this.requireCustomer(accountId);
+    const clearing = await this.repo.systemLedgerAccountId('ach_clearing');
+    return this.repo.post({
+      idempotencyKey: input.idempotencyKey ?? randomUUID(),
+      type: 'withdrawal',
+      description: input.description,
+      entries: [
+        { ledgerAccountId: customer, direction: 'debit', amountMinor: minor },
+        { ledgerAccountId: clearing, direction: 'credit', amountMinor: minor },
+      ],
+    });
+  }
+
+  /** ACH-style push from a Connect partner back into the customer account (e.g. a cash-out). */
+  async achCredit(accountId: number, input: MoveInput) {
+    const minor = this.requirePositive(input.amount);
+    const customer = await this.requireCustomer(accountId);
+    const clearing = await this.repo.systemLedgerAccountId('ach_clearing');
+    return this.repo.post({
+      idempotencyKey: input.idempotencyKey ?? randomUUID(),
+      type: 'deposit',
+      description: input.description,
+      entries: [
+        { ledgerAccountId: clearing, direction: 'debit', amountMinor: minor },
+        { ledgerAccountId: customer, direction: 'credit', amountMinor: minor },
+      ],
+    });
+  }
+
   /** Reverse a posted journal with an offsetting journal (returned deposit, chargeback, etc.). */
   reverse(transactionId: number, reason?: string) {
     return this.repo.reverse(transactionId, reason);

@@ -9,6 +9,11 @@ export type {
   Card, NewCard,
   CardTransaction, NewCardTransaction,
   OtpCode, NewOtpCode,
+  Partner, NewPartner,
+  PartnerApiKey, NewPartnerApiKey,
+  ConnectLinkSession, NewConnectLinkSession,
+  ConnectGrant, NewConnectGrant,
+  ConnectTransfer, NewConnectTransfer,
 } from './schema';
 
 // Database connection type

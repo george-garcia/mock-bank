@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { CardsRepository } from './cards.repository';
 import { LithicService } from '../lithic/lithic.service';
 import { AccountsService } from '../accounts/accounts.service';
+import { AuditService } from '../audit/audit.service';
 import { NewCard, NewCardTransaction } from '@mock-bank/database';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class CardsService {
     private cardsRepository: CardsRepository,
     private lithicService: LithicService,
     private accountsService: AccountsService,
+    private auditService: AuditService,
   ) {}
 
   async createCard(userId: number, accountId: number, data: { spendLimit?: string; spendLimitPeriod?: string; memo?: string }) {
@@ -30,6 +32,7 @@ export class CardsService {
       lithicCardToken: lithicCard.token,
       lastFour: lithicCard.last_four,
       cardNumber: lithicCard.card_number,
+      cvv: lithicCard.cvv,
       expiryMonth: lithicCard.exp_month,
       expiryYear: lithicCard.exp_year,
       status: 'active',
@@ -66,14 +69,52 @@ export class CardsService {
     return this.sanitize(card);
   }
 
-  /** Never expose the full PAN to clients — last four only (PCI). */
-  private sanitize<T extends { cardNumber?: string | null }>(card: T) {
-    const { cardNumber, ...safe } = card;
+  /**
+   * Reveal a card's sensitive details (full PAN + CVV) to its owner — the equivalent of a real
+   * banking app's "show card number". This is the only path that returns the unsanitized PAN/CVV,
+   * so the cardholder can use the card with an outside merchant. Owner-only, and audited.
+   */
+  async revealCard(id: number, userId: number) {
+    const card = await this.cardsRepository.findById(id);
+    if (!card) throw new NotFoundException('Card not found');
+    await this.accountsService.findOne(card.accountId, userId); // ownership check (throws otherwise)
+
+    await this.auditService.record({
+      actorType: 'customer',
+      actorUserId: userId,
+      action: 'card.reveal',
+      targetType: 'card',
+      targetId: card.id,
+    });
+
+    return {
+      id: card.id,
+      cardNumber: card.cardNumber,
+      cvv: card.cvv,
+      expiryMonth: card.expiryMonth,
+      expiryYear: card.expiryYear,
+      lastFour: card.lastFour,
+    };
+  }
+
+  /** Never expose the full PAN or CVV to clients — last four only (PCI). */
+  private sanitize<T extends { cardNumber?: string | null; cvv?: string | null }>(card: T) {
+    const { cardNumber, cvv, ...safe } = card;
     return safe;
   }
 
   async findByLithicToken(token: string) {
     return this.cardsRepository.findByLithicToken(token);
+  }
+
+  /** Internal: find a card by its full PAN (used by the Network/acquiring API). Not sanitized. */
+  async findByPanInternal(pan: string) {
+    return this.cardsRepository.findByPan(pan);
+  }
+
+  /** Internal: fetch the raw card row (with accountId) by id. Not sanitized. */
+  async findCardByIdInternal(id: number) {
+    return this.cardsRepository.findById(id);
   }
 
   async getAccountForCard(cardId: number) {

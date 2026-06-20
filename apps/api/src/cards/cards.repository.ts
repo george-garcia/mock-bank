@@ -19,6 +19,12 @@ export class CardsRepository {
     return card || null;
   }
 
+  /** Look up a card by its full PAN — used by the Network/acquiring API to charge a card. */
+  async findByPan(pan: string) {
+    const [card] = await db.select().from(cards).where(eq(cards.cardNumber, pan));
+    return card || null;
+  }
+
   async findByAccountId(accountId: number) {
     return db.select().from(cards).where(eq(cards.accountId, accountId)).orderBy(desc(cards.createdAt));
   }

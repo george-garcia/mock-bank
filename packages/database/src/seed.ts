@@ -3,8 +3,11 @@ dotenv.config({ path: '../../.env' });
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import bcryptjs from 'bcryptjs';
+import { createHash } from 'crypto';
 import { eq } from 'drizzle-orm';
-import { users, accounts, ledgerAccounts, ledgerTransactions, ledgerEntries, staffUsers } from './schema';
+import { users, accounts, ledgerAccounts, ledgerTransactions, ledgerEntries, staffUsers, cards, partners, partnerApiKeys } from './schema';
+
+const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://mockbank:mockbank_dev@localhost:5432/mockbank';
 
@@ -62,11 +65,13 @@ async function seed() {
   ];
 
   let bankCashMinor = 0;
+  let aliceCheckingId: number | undefined;
   for (const [i, sa] of seedAccounts.entries()) {
     const [account] = await db
       .insert(accounts)
       .values({ userId: sa.userId, type: sa.type, status: 'active' })
       .returning();
+    if (i === 0) aliceCheckingId = account.id;
 
     const [ledgerAccount] = await db
       .insert(ledgerAccounts)
@@ -105,6 +110,38 @@ async function seed() {
   await db.update(ledgerAccounts).set({ balanceMinor: bankCashMinor }).where(eq(ledgerAccounts.id, bankCash.id));
   console.log(`Created ${seedAccounts.length} customer accounts with opening balances`);
 
+  // A deterministic test card for Alice's checking account, so external merchants (the gambling
+  // site) can "swipe" a known PAN out of the box. In a real system the PAN/cvv live only at the
+  // processor; here they are stored so the mock Network API can authorize by PAN.
+  if (aliceCheckingId) {
+    await db.insert(cards).values({
+      accountId: aliceCheckingId,
+      lithicCardToken: 'seed-card-alice',
+      lastFour: '1111',
+      cardNumber: '4111111111111111',
+      cvv: '123',
+      expiryMonth: '12',
+      expiryYear: '2030',
+      status: 'active',
+    });
+    console.log('Created 1 test card for Alice (checking)');
+  }
+
+  // A third-party partner (the gambling site) with a known dev API key, so its backend can
+  // authenticate to the bank's Network + Connect APIs immediately.
+  const DEV_PARTNER_KEY = 'sk_test_luckyspin_dev';
+  const [partner] = await db
+    .insert(partners)
+    .values({ name: 'Lucky Spin Casino', kind: 'merchant' })
+    .returning();
+  await db.insert(partnerApiKeys).values({
+    partnerId: partner.id,
+    keyPrefix: DEV_PARTNER_KEY.slice(0, 12),
+    keyHash: sha256(DEV_PARTNER_KEY),
+    label: 'dev key',
+  });
+  console.log(`Created partner "${partner.name}" with API key: ${DEV_PARTNER_KEY}`);
+
   console.log('\nSeed data created successfully!');
   console.log('Bank customers (mock-bank app):');
   console.log('  Alice: alice@example.com / password123');
@@ -112,6 +149,10 @@ async function seed() {
   console.log('Staff (admin panel — separate login):');
   console.log('  Admin:   admin@bank.internal / password123  (engineer)');
   console.log('  Support: support@bank.internal / password123  (customer service)');
+  console.log('Test card (for the gambling site "swipe" demo):');
+  console.log('  PAN 4111 1111 1111 1111  exp 12/2030  cvv 123  (Alice, checking)');
+  console.log('Partner (gambling site) API key:');
+  console.log('  sk_test_luckyspin_dev');
 
   await client.end();
 }

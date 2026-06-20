@@ -49,6 +49,15 @@ export class CardsController {
     return this.cardsService.findCardTransactions(id, userId);
   }
 
+  @Get(':id/reveal')
+  @ApiOperation({ summary: 'Reveal full card number, expiry and CVV (owner only)' })
+  async reveal(
+    @CurrentUser('sub') userId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.cardsService.revealCard(id, userId);
+  }
+
   @Patch(':id/freeze')
   @ApiOperation({ summary: 'Freeze a card' })
   async freeze(

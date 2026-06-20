@@ -61,6 +61,8 @@ async function bootstrap() {
     .setDescription('The Mock Bank API documentation')
     .setVersion('1.0')
     .addBearerAuth()
+    // Partner-facing products (Network + Connect) authenticate with a partner API key.
+    .addApiKey({ type: 'apiKey', name: 'Authorization', in: 'header', description: 'Bearer sk_...' }, 'partner-api-key')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
