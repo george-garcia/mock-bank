@@ -93,6 +93,26 @@ See [PROJECT_PLAN.md](./PROJECT_PLAN.md) for the full breakdown.
 7. ✅ Frontend Features
 8. 🔄 Polish & Testing (in progress)
 
+## Partner APIs (for external companies)
+
+The bank exposes two public, partner-facing products so outside companies (e.g. the
+[Lucky Spin Casino](https://github.com/george-garcia/lucky-spin-casino)) can let bank customers spend their money — without
+ever touching the bank's database. Both authenticate with a **partner API key**
+(`Authorization: Bearer sk_...`, seeded by `pnpm db:seed`). See Swagger (`/api/docs`).
+
+- **Network (card acceptance)** — `apps/api/src/network`. A merchant charges a bank-issued card
+  by PAN, reusing the ledger's auth-hold → settlement flow:
+  `POST /api/network/authorizations` · `/authorizations/:token/capture` · `/void` · `POST /api/network/refunds`.
+- **Connect (account linking)** — `apps/api/src/connect`. A Plaid-style flow: the partner creates
+  a link session, the customer consents on the bank's hosted page (`/connect` route in `apps/web`),
+  the partner exchanges a public token for an access-token grant, then pulls/pushes funds:
+  `POST /api/connect/link-sessions` · `POST /api/connect/token` · `GET /api/connect/accounts` ·
+  `POST /api/connect/transfers`.
+
+The client SDK partners embed for the Connect flow lives in its own repo,
+[`@mockbank/connect`](https://github.com/george-garcia/connect-sdk). A deterministic test card (PAN `4111 1111 1111 1111`, exp `12/2030`, CVV
+`123`, Alice's checking) and a partner key (`sk_test_luckyspin_dev`) are created by the seed.
+
 ## License
 
 MIT

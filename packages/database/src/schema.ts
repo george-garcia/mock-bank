@@ -21,6 +21,13 @@ export const holdStatusEnum = pgEnum('hold_status', ['active', 'released', 'capt
 export const holdTypeEnum = pgEnum('hold_type', ['card_auth', 'manual']);
 export const pendingDepositStatusEnum = pgEnum('pending_deposit_status', ['pending', 'cleared', 'failed']);
 
+// Partner / "Connect" enums — third-party companies (merchants, data partners) that integrate
+// with the bank over its public partner APIs (card acceptance + account linking).
+export const partnerKindEnum = pgEnum('partner_kind', ['merchant', 'connect']);
+export const connectSessionStatusEnum = pgEnum('connect_session_status', ['created', 'authorized', 'exchanged', 'expired']);
+export const connectTransferDirectionEnum = pgEnum('connect_transfer_direction', ['debit', 'credit']);
+export const connectTransferStatusEnum = pgEnum('connect_transfer_status', ['posted', 'failed']);
+
 // Users table
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -221,6 +228,7 @@ export const cards = pgTable('cards', {
   lithicCardToken: varchar('lithic_card_token', { length: 255 }).unique(),
   lastFour: varchar('last_four', { length: 4 }),
   cardNumber: varchar('card_number', { length: 255 }), // tokenized/processor-held in a real system
+  cvv: varchar('cvv', { length: 4 }), // sensitive — never returned to clients (see CardsService.sanitize)
   expiryMonth: varchar('expiry_month', { length: 2 }),
   expiryYear: varchar('expiry_year', { length: 4 }),
   status: cardStatusEnum('status').notNull().default('active'),
@@ -248,6 +256,77 @@ export const cardTransactions = pgTable('card_transactions', {
   metadata: text('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Partners & Connect (public partner-facing products) ─────────────────────
+//
+// The bank offers two products to outside companies (e.g. a gambling site), used purely
+// over HTTP — the partner never touches the bank's database directly:
+//   • Card acceptance ("Network"): authorize/capture a bank-issued card by PAN, like an acquirer.
+//   • Connect: a Plaid-style account-linking flow that lets a partner pull/push funds with consent.
+
+// A third-party company integrating with the bank.
+export const partners = pgTable('partners', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  kind: partnerKindEnum('kind').notNull().default('merchant'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// API keys a partner uses for server-to-server auth. Only the SHA-256 hash is stored; the
+// plaintext key (prefix + secret) is shown once at creation.
+export const partnerApiKeys = pgTable('partner_api_keys', {
+  id: serial('id').primaryKey(),
+  partnerId: integer('partner_id').notNull().references(() => partners.id, { onDelete: 'cascade' }),
+  keyPrefix: varchar('key_prefix', { length: 32 }).notNull(), // non-secret, helps identify the key
+  keyHash: varchar('key_hash', { length: 64 }).notNull().unique(), // sha256 of the full key
+  label: varchar('label', { length: 100 }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// One account-linking attempt. The partner creates it (server-side), the customer authorizes
+// it on the bank's hosted Connect page, then the partner exchanges its public token for a grant.
+export const connectLinkSessions = pgTable('connect_link_sessions', {
+  id: serial('id').primaryKey(),
+  partnerId: integer('partner_id').notNull().references(() => partners.id, { onDelete: 'cascade' }),
+  linkToken: varchar('link_token', { length: 64 }).notNull().unique(), // opaque, used to load the hosted UI
+  publicToken: varchar('public_token', { length: 64 }).unique(), // minted on authorize, exchanged once
+  status: connectSessionStatusEnum('status').notNull().default('created'),
+  scopes: varchar('scopes', { length: 255 }).notNull().default('balances,transfers'),
+  // Populated when the customer authorizes the link.
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  accountId: integer('account_id').references(() => accounts.id, { onDelete: 'set null' }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// A durable access grant: the partner's long-lived permission to act on one linked account.
+// Only the hash of the access token is stored.
+export const connectGrants = pgTable('connect_grants', {
+  id: serial('id').primaryKey(),
+  partnerId: integer('partner_id').notNull().references(() => partners.id, { onDelete: 'cascade' }),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  accountId: integer('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  accessTokenHash: varchar('access_token_hash', { length: 64 }).notNull().unique(),
+  scopes: varchar('scopes', { length: 255 }).notNull().default('balances,transfers'),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ACH-style movements a Connect partner initiates against a linked account. A debit pulls funds
+// out to the partner; a credit (cash-out) pushes funds back in. Each maps to a ledger journal.
+export const connectTransfers = pgTable('connect_transfers', {
+  id: serial('id').primaryKey(),
+  grantId: integer('grant_id').notNull().references(() => connectGrants.id, { onDelete: 'cascade' }),
+  direction: connectTransferDirectionEnum('direction').notNull(),
+  amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+  status: connectTransferStatusEnum('status').notNull().default('posted'),
+  description: text('description'),
+  ledgerTransactionId: integer('ledger_transaction_id').references(() => ledgerTransactions.id),
+  idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ─── Relations ─────────────────────────────────────────────────────────────
@@ -295,6 +374,25 @@ export const cardTransactionsRelations = relations(cardTransactions, ({ one }) =
   transaction: one(ledgerTransactions, { fields: [cardTransactions.transactionId], references: [ledgerTransactions.id] }),
 }));
 
+export const partnersRelations = relations(partners, ({ many }) => ({
+  apiKeys: many(partnerApiKeys),
+  grants: many(connectGrants),
+}));
+
+export const partnerApiKeysRelations = relations(partnerApiKeys, ({ one }) => ({
+  partner: one(partners, { fields: [partnerApiKeys.partnerId], references: [partners.id] }),
+}));
+
+export const connectGrantsRelations = relations(connectGrants, ({ one, many }) => ({
+  partner: one(partners, { fields: [connectGrants.partnerId], references: [partners.id] }),
+  account: one(accounts, { fields: [connectGrants.accountId], references: [accounts.id] }),
+  transfers: many(connectTransfers),
+}));
+
+export const connectTransfersRelations = relations(connectTransfers, ({ one }) => ({
+  grant: one(connectGrants, { fields: [connectTransfers.grantId], references: [connectGrants.id] }),
+}));
+
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 export type User = typeof users.$inferSelect;
@@ -327,3 +425,13 @@ export type CardTransaction = typeof cardTransactions.$inferSelect;
 export type NewCardTransaction = typeof cardTransactions.$inferInsert;
 export type OtpCode = typeof otpCodes.$inferSelect;
 export type NewOtpCode = typeof otpCodes.$inferInsert;
+export type Partner = typeof partners.$inferSelect;
+export type NewPartner = typeof partners.$inferInsert;
+export type PartnerApiKey = typeof partnerApiKeys.$inferSelect;
+export type NewPartnerApiKey = typeof partnerApiKeys.$inferInsert;
+export type ConnectLinkSession = typeof connectLinkSessions.$inferSelect;
+export type NewConnectLinkSession = typeof connectLinkSessions.$inferInsert;
+export type ConnectGrant = typeof connectGrants.$inferSelect;
+export type NewConnectGrant = typeof connectGrants.$inferInsert;
+export type ConnectTransfer = typeof connectTransfers.$inferSelect;
+export type NewConnectTransfer = typeof connectTransfers.$inferInsert;

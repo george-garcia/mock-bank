@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/auth';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { LoginPage } from './pages/LoginPage';
+import { ConnectConsentPage } from './pages/ConnectConsentPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { CardsPage } from './pages/CardsPage';
@@ -18,6 +19,8 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Public hosted consent page for the Connect SDK (opened in a popup by partner sites). */}
+      <Route path="/connect" element={<ConnectConsentPage />} />
       <Route
         path="/"
         element={

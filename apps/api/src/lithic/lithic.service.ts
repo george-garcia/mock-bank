@@ -5,6 +5,7 @@ export interface LithicCard {
   token: string;
   last_four: string;
   card_number?: string;
+  cvv?: string;
   exp_month: string;
   exp_year: string;
   state: 'OPEN' | 'PAUSED' | 'CLOSED';
@@ -115,10 +116,12 @@ export class LithicService {
       const body = JSON.parse((options.body as string) || '{}');
       this.mockCounter++;
       const token = `mock-card-${this.mockCounter}`;
+      const lastFour = String(1000 + Math.floor(Math.random() * 9000));
       const card: LithicCard = {
         token,
-        last_four: String(1000 + Math.floor(Math.random() * 9000)),
-        card_number: `411111111111${1000 + Math.floor(Math.random() * 9000)}`,
+        last_four: lastFour,
+        card_number: `411111111111${lastFour}`,
+        cvv: String(100 + Math.floor(Math.random() * 900)),
         exp_month: String(Math.floor(Math.random() * 12) + 1).padStart(2, '0'),
         exp_year: String(new Date().getFullYear() + 3),
         state: 'OPEN',

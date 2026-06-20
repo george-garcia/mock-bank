@@ -2,7 +2,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { CardTransactionsModal } from '../components/features/CardTransactionsModal';
-import { CreditCard, Plus, Snowflake, RotateCcw, XCircle, Receipt } from 'lucide-react';
+import { CreditCard, Plus, Snowflake, RotateCcw, XCircle, Receipt, Eye, EyeOff } from 'lucide-react';
+
+interface RevealedCard { cardNumber: string; cvv: string; expiryMonth: string; expiryYear: string }
 
 interface CardsViewProps {
   cards: any[];
@@ -19,7 +21,13 @@ interface CardsViewProps {
   freezeMutation: any;
   unfreezeMutation: any;
   cancelMutation: any;
+  revealed: Record<number, RevealedCard>;
+  revealCard: (id: number) => void;
+  hideCard: (id: number) => void;
+  revealingId: number | null;
 }
+
+const groupPan = (pan: string) => pan.replace(/(.{4})/g, '$1 ').trim();
 
 export function CardsView({
   cards,
@@ -35,7 +43,11 @@ export function CardsView({
   isCreating,
   freezeMutation,
   unfreezeMutation,
-  cancelMutation
+  cancelMutation,
+  revealed,
+  revealCard,
+  hideCard,
+  revealingId,
 }: CardsViewProps) {
   return (
     <div className="space-y-8 animate-fade-in">
@@ -168,15 +180,15 @@ export function CardsView({
 
                   <div className="mb-6 p-4 bg-gradient-to-br from-black to-surface-highlight border border-white/10 rounded-xl relative overflow-hidden shadow-inner">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-accent/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-                    <p className="text-white font-mono text-xl tracking-[0.2em] relative z-10 drop-shadow-md">
-                      •••• •••• •••• {card.lastFour}
+                    <p className="text-white font-mono text-xl tracking-[0.2em] relative z-10 drop-shadow-md select-all">
+                      {revealed[card.id] ? groupPan(revealed[card.id].cardNumber) : `•••• •••• •••• ${card.lastFour}`}
                     </p>
                     <div className="flex justify-between mt-4 relative z-10">
                       <p className="text-content-muted text-xs font-semibold tracking-widest uppercase">
                         <span className="opacity-50 mr-1">EXP</span> {card.expiryMonth}/{card.expiryYear}
                       </p>
-                      <p className="text-content-muted text-xs font-semibold tracking-widest uppercase">
-                        <span className="opacity-50 mr-1">CVV</span> ***
+                      <p className="text-content-muted text-xs font-semibold tracking-widest uppercase select-all">
+                        <span className="opacity-50 mr-1">CVV</span> {revealed[card.id] ? revealed[card.id].cvv : '***'}
                       </p>
                     </div>
                   </div>
@@ -201,6 +213,24 @@ export function CardsView({
                       <Receipt className="w-4 h-4 mr-1.5" />
                       Transactions
                     </Button>
+                    {card.status !== 'cancelled' && (
+                      revealed[card.id] ? (
+                        <Button variant="ghost" size="sm" onClick={() => hideCard(card.id)}>
+                          <EyeOff className="w-4 h-4 mr-1.5" />
+                          Hide details
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => revealCard(card.id)}
+                          isLoading={revealingId === card.id}
+                        >
+                          <Eye className="w-4 h-4 mr-1.5" />
+                          Show details
+                        </Button>
+                      )
+                    )}
                     {card.status === 'frozen' && (
                       <Button
                         variant="secondary"

@@ -96,6 +96,7 @@ export const cardsApi = {
   unfreeze: (id: number) => unwrap(api.patch(`/cards/${id}/unfreeze`)),
   cancel: (id: number) => unwrap(api.patch(`/cards/${id}/cancel`)),
   transactions: (id: number) => unwrap(api.get(`/cards/${id}/transactions`)),
+  reveal: (id: number) => unwrap(api.get(`/cards/${id}/reveal`)),
 };
 
 // Deposits API
@@ -122,4 +123,22 @@ export const statementsApi = {
 export const transfersApi = {
   create: (data: { fromAccountId: number; toAccountId: number; amount: string; description?: string }) =>
     unwrap(api.post('/transfers', data)),
+};
+
+// Connect (hosted account-linking consent page). Uses its OWN axios instance with no global
+// 401→/login redirect: the popup must manage its own login inline, not bounce to the bank app.
+const connectClient = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+export const connectApi = {
+  session: (linkToken: string) => unwrap(connectClient.get(`/connect/link-sessions/${linkToken}`)),
+  login: (data: { email: string; password: string }) => unwrap(connectClient.post('/auth/login', data)),
+  verifyLogin: (data: { challengeToken: string; code: string }) =>
+    unwrap(connectClient.post('/auth/2fa/verify-login', data)),
+  accounts: () => unwrap(connectClient.get('/accounts')),
+  authorize: (linkToken: string, accountId: number) =>
+    unwrap(connectClient.post(`/connect/link-sessions/${linkToken}/authorize`, { accountId })),
 };

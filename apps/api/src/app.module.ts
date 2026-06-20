@@ -18,6 +18,9 @@ import { LithicWebhookModule } from './lithic/lithic-webhook.module';
 import { DepositsModule } from './deposits/deposits.module';
 import { WithdrawalsModule } from './withdrawals/withdrawals.module';
 import { TransfersModule } from './transfers/transfers.module';
+import { PartnersModule } from './partners/partners.module';
+import { NetworkModule } from './network/network.module';
+import { ConnectModule } from './connect/connect.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 
 @Module({
@@ -46,6 +49,9 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger.midd
     DepositsModule,
     WithdrawalsModule,
     TransfersModule,
+    PartnersModule,
+    NetworkModule,
+    ConnectModule,
   ],
   controllers: [],
   providers: [

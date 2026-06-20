@@ -42,6 +42,19 @@ export function useCards() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cards'] }),
   });
 
+  // Sensitive card details (full PAN/CVV), fetched on demand and held only in memory.
+  const [revealed, setRevealed] = useState<Record<number, { cardNumber: string; cvv: string; expiryMonth: string; expiryYear: string }>>({});
+  const revealMutation = useMutation({
+    mutationFn: (id: number) => cardsApi.reveal(id),
+    onSuccess: (data: any) => setRevealed((r) => ({ ...r, [data.id]: data })),
+  });
+  const revealCard = (id: number) => revealMutation.mutate(id);
+  const hideCard = (id: number) => setRevealed((r) => {
+    const next = { ...r };
+    delete next[id];
+    return next;
+  });
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     createMutation.mutate({
@@ -69,5 +82,9 @@ export function useCards() {
     freezeMutation,
     unfreezeMutation,
     cancelMutation,
+    revealed,
+    revealCard,
+    hideCard,
+    revealingId: revealMutation.isPending ? (revealMutation.variables as number) : null,
   };
 }
