@@ -8,12 +8,14 @@ export type {
   Hold, NewHold,
   Card, NewCard,
   CardTransaction, NewCardTransaction,
+  CardTransactionEvent, NewCardTransactionEvent,
   OtpCode, NewOtpCode,
   Partner, NewPartner,
   PartnerApiKey, NewPartnerApiKey,
   ConnectLinkSession, NewConnectLinkSession,
   ConnectGrant, NewConnectGrant,
-  ConnectTransfer, NewConnectTransfer,
+  Payment, NewPayment,
+  PaymentEvent, NewPaymentEvent,
 } from './schema';
 
 // Database connection type

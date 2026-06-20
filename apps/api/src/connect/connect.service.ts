@@ -3,12 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'crypto';
 import { ConnectGrant } from '@mock-bank/database';
 import { AccountsService } from '../accounts/accounts.service';
-import { LedgerService } from '../ledger/ledger.service';
+import { LithicService } from '../lithic/lithic.service';
 import { AuditService } from '../audit/audit.service';
 import { toDecimalString } from '../common/money';
 import { ConnectRepository } from './connect.repository';
 import { AuthenticatedPartner } from '../partners/partner-api-key.guard';
 import { CreateConnectTransferDto } from './dto/connect.dto';
+import { LithicPayment } from '../lithic/lithic.types';
 
 const SESSION_TTL_MS = 30 * 60 * 1000; // a link session is valid for 30 minutes
 
@@ -30,7 +31,7 @@ export class ConnectService {
   constructor(
     private repo: ConnectRepository,
     private accountsService: AccountsService,
-    private ledgerService: LedgerService,
+    private lithic: LithicService,
     private auditService: AuditService,
     private config: ConfigService,
   ) {}
@@ -97,6 +98,7 @@ export class ConnectService {
       userId: session.userId,
       accountId: session.accountId,
       accessTokenHash: sha256(accessToken),
+      externalBankAccountToken: `ext_${randomBytes(16).toString('hex')}`, // Lithic External Bank Account
       scopes: session.scopes,
     });
     await this.repo.updateLinkSession(session.id, { status: 'exchanged' });
@@ -119,28 +121,19 @@ export class ConnectService {
     return { accounts: [this.accountView(account)] };
   }
 
+  /** Move money on the linked account as a Lithic ACH Payment (DEBIT = pull, CREDIT = cash-out). */
   async createTransfer(grant: ConnectGrant, dto: CreateConnectTransferDto) {
-    const amount = toDecimalString(dto.amount);
     const idempotencyKey = `connect_transfer:${grant.id}:${dto.idempotencyKey ?? randomBytes(8).toString('hex')}`;
 
-    const existing = await this.repo.findTransferByIdempotencyKey(idempotencyKey);
-    if (existing) return this.transferView(existing);
-
-    // debit pulls funds out to the partner; credit (cash-out) pushes funds back in.
-    const move = dto.direction === 'debit'
-      ? this.ledgerService.achDebit(grant.accountId, { amount, description: dto.description ?? 'Connect debit', idempotencyKey })
-      : this.ledgerService.achCredit(grant.accountId, { amount, description: dto.description ?? 'Connect credit (cash-out)', idempotencyKey });
-    const ledgerResult = await move;
-
-    const transfer = await this.repo.createTransfer({
-      grantId: grant.id,
-      direction: dto.direction,
-      amountMinor: dto.amount,
-      status: 'posted',
-      description: dto.description,
-      ledgerTransactionId: ledgerResult.transaction.id,
+    const payment = await this.lithic.createPayment({
+      direction: dto.direction === 'debit' ? 'DEBIT' : 'CREDIT',
+      amount: dto.amount, // minor units
+      financialAccountToken: `account_${grant.accountId}`,
+      externalBankAccountToken: grant.externalBankAccountToken ?? `ext_${grant.id}`,
       idempotencyKey,
+      grantId: grant.id,
     });
+
     await this.auditService.record({
       actorType: 'customer',
       actorUserId: grant.userId,
@@ -148,10 +141,10 @@ export class ConnectService {
       targetType: 'account',
       targetId: grant.accountId,
       amountMinor: dto.amount,
-      metadata: { partnerId: grant.partnerId, transferId: transfer.id, transactionId: ledgerResult.transaction.id },
+      metadata: { partnerId: grant.partnerId, paymentToken: payment.token },
     });
-    this.logger.log(`Connect ${dto.direction} ${amount} on account ${grant.accountId} (partner ${grant.partnerId})`);
-    return this.transferView(transfer);
+    this.logger.log(`Connect ${dto.direction} ${toDecimalString(dto.amount)} on account ${grant.accountId} (partner ${grant.partnerId})`);
+    return this.transferView(payment, dto.direction);
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────
@@ -171,7 +164,13 @@ export class ConnectService {
     };
   }
 
-  private transferView(t: { id: number; direction: string; amountMinor: number; status: string; createdAt: Date }) {
-    return { id: t.id, direction: t.direction, amount: toDecimalString(t.amountMinor), status: t.status, created_at: t.createdAt };
+  private transferView(payment: LithicPayment, direction: 'debit' | 'credit') {
+    return {
+      id: payment.token,
+      direction,
+      amount: toDecimalString(payment.amount),
+      status: payment.status.toLowerCase(),
+      created_at: payment.created,
+    };
   }
 }

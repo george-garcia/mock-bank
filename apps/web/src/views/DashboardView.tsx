@@ -171,14 +171,14 @@ export function DashboardView({ accounts, cards, totalBalance, isLoading }: Dash
                     </div>
                     <Badge
                       variant={
-                        card.status === 'active'
+                        card.state === 'OPEN'
                           ? 'success'
-                          : card.status === 'frozen'
+                          : card.state === 'PAUSED'
                           ? 'warning'
                           : 'danger'
                       }
                     >
-                      {card.status}
+                      {card.state}
                     </Badge>
                   </div>
                 ))}

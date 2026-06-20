@@ -4,29 +4,53 @@ import { relations } from 'drizzle-orm';
 // Enums
 export const accountTypeEnum = pgEnum('account_type', ['checking', 'savings']);
 export const accountStatusEnum = pgEnum('account_status', ['active', 'frozen', 'closed']);
-export const cardStatusEnum = pgEnum('card_status', ['active', 'frozen', 'cancelled']);
-export const cardTransactionStatusEnum = pgEnum('card_transaction_status', ['authorized', 'declined', 'settled', 'voided']);
 export const twoFactorMethodEnum = pgEnum('two_factor_method', ['none', 'email', 'totp']);
 export const otpPurposeEnum = pgEnum('otp_purpose', ['login', 'enable']);
 export const staffRoleEnum = pgEnum('staff_role', ['admin', 'auditor']);
+
+// ─── Lithic processor objects (1:1 with the Lithic API) ──────────────────────
+// Card object: state, type, spend_limit_duration.
+export const cardStateEnum = pgEnum('card_state', ['OPEN', 'PAUSED', 'CLOSED', 'PENDING_ACTIVATION', 'PENDING_FULFILLMENT']);
+export const cardTypeEnum = pgEnum('card_type', ['VIRTUAL', 'PHYSICAL', 'MERCHANT_LOCKED', 'SINGLE_USE']);
+export const spendLimitDurationEnum = pgEnum('spend_limit_duration', ['TRANSACTION', 'DAILY', 'MONTHLY', 'ANNUALLY', 'FOREVER']);
+// Transaction object: status, result, and the events[] lifecycle.
+export const transactionStatusEnum = pgEnum('transaction_status', ['PENDING', 'SETTLED', 'DECLINED', 'VOIDED', 'EXPIRED']);
+export const transactionResultEnum = pgEnum('transaction_result', ['APPROVED', 'DECLINED']);
+export const cardEventTypeEnum = pgEnum('card_event_type', [
+  'AUTHORIZATION', 'AUTHORIZATION_ADVICE', 'AUTHORIZATION_REVERSAL', 'AUTHORIZATION_EXPIRY', 'BALANCE_INQUIRY',
+  'CLEARING', 'CORRECTION_CREDIT', 'CORRECTION_DEBIT', 'CREDIT_AUTHORIZATION', 'FINANCIAL_AUTHORIZATION',
+  'FINANCIAL_CREDIT_AUTHORIZATION', 'RETURN', 'RETURN_REVERSAL',
+]);
+export const cardEventResultEnum = pgEnum('card_event_result', [
+  'APPROVED', 'DECLINED', 'INSUFFICIENT_FUNDS', 'CARD_PAUSED', 'CARD_CLOSED', 'UNAUTHORIZED_MERCHANT',
+  'CARD_NOT_ACTIVATED', 'INACTIVE_ACCOUNT',
+]);
+// ACH Payment object: direction (DEBIT=pull / CREDIT=push), method, status, result, lifecycle events.
+export const paymentCategoryEnum = pgEnum('payment_category', ['ACH']);
+export const paymentDirectionEnum = pgEnum('payment_direction', ['DEBIT', 'CREDIT']);
+export const paymentMethodEnum = pgEnum('payment_method', ['ACH_NEXT_DAY', 'ACH_SAME_DAY']);
+export const paymentStatusEnum = pgEnum('payment_status', ['PENDING', 'SETTLED', 'DECLINED', 'EXPIRED', 'VOIDED', 'RETURNED', 'REVERSED']);
+export const paymentResultEnum = pgEnum('payment_result', ['APPROVED', 'DECLINED']);
+export const paymentEventTypeEnum = pgEnum('payment_event_type', [
+  'ACH_ORIGINATION_INITIATED', 'ACH_ORIGINATION_REVIEWED', 'ACH_ORIGINATION_PROCESSED', 'ACH_ORIGINATION_SETTLED',
+  'ACH_ORIGINATION_RELEASED', 'ACH_RETURN_INITIATED', 'ACH_RETURN_PROCESSED', 'ACH_RECEIPT_PROCESSED', 'ACH_RECEIPT_SETTLED',
+]);
 
 // Double-entry ledger enums
 export const ledgerAccountCategoryEnum = pgEnum('ledger_account_category', ['asset', 'liability', 'equity', 'revenue', 'expense']);
 export const ledgerSideEnum = pgEnum('ledger_side', ['debit', 'credit']);
 export const ledgerTxnTypeEnum = pgEnum('ledger_txn_type', [
-  'deposit', 'withdrawal', 'transfer', 'card_settlement', 'card_auth', 'reversal', 'refund', 'fee', 'adjustment',
+  'deposit', 'withdrawal', 'transfer', 'card_clearing', 'return', 'ach_debit', 'ach_credit', 'reversal', 'fee', 'adjustment',
 ]);
 export const ledgerTxnStatusEnum = pgEnum('ledger_txn_status', ['pending', 'posted', 'reversed']);
 export const holdStatusEnum = pgEnum('hold_status', ['active', 'released', 'captured', 'expired']);
-export const holdTypeEnum = pgEnum('hold_type', ['card_auth', 'manual']);
+export const holdTypeEnum = pgEnum('hold_type', ['authorization', 'manual']);
 export const pendingDepositStatusEnum = pgEnum('pending_deposit_status', ['pending', 'cleared', 'failed']);
 
 // Partner / "Connect" enums — third-party companies (merchants, data partners) that integrate
 // with the bank over its public partner APIs (card acceptance + account linking).
 export const partnerKindEnum = pgEnum('partner_kind', ['merchant', 'connect']);
 export const connectSessionStatusEnum = pgEnum('connect_session_status', ['created', 'authorized', 'exchanged', 'expired']);
-export const connectTransferDirectionEnum = pgEnum('connect_transfer_direction', ['debit', 'credit']);
-export const connectTransferStatusEnum = pgEnum('connect_transfer_status', ['posted', 'failed']);
 
 // Users table
 export const users = pgTable('users', {
@@ -112,16 +136,15 @@ export const ledgerEntries = pgTable('ledger_entries', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Holds reduce a customer account's *available* balance without moving posted funds
-// (e.g. a card authorization). Released/expired holds free the funds; a captured hold has
-// been turned into a posted settlement.
+// Holds reduce a customer account's *available* balance without moving posted funds (a card
+// AUTHORIZATION). Released/expired holds free the funds; a captured hold has been cleared.
 export const holds = pgTable('holds', {
   id: serial('id').primaryKey(),
   ledgerAccountId: integer('ledger_account_id').notNull().references(() => ledgerAccounts.id, { onDelete: 'restrict' }),
   amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(), // always positive
   status: holdStatusEnum('status').notNull().default('active'),
   type: holdTypeEnum('type').notNull(),
-  externalRef: varchar('external_ref', { length: 255 }).unique(), // e.g. card auth token
+  externalRef: varchar('external_ref', { length: 255 }).unique(), // e.g. the transaction token
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   releasedAt: timestamp('released_at', { withTimezone: true }),
   metadata: text('metadata'),
@@ -211,7 +234,7 @@ export const auditLogs = pgTable('audit_logs', {
   id: serial('id').primaryKey(),
   actorType: varchar('actor_type', { length: 16 }).notNull().default('system'), // 'customer' | 'staff' | 'system'
   actorUserId: integer('actor_user_id'),
-  action: varchar('action', { length: 100 }).notNull(), // e.g. 'money.deposit', 'auth.login', 'card.refund'
+  action: varchar('action', { length: 100 }).notNull(), // e.g. 'money.deposit', 'auth.login', 'card.clearing'
   targetType: varchar('target_type', { length: 50 }),
   targetId: varchar('target_id', { length: 64 }),
   amountMinor: bigint('amount_minor', { mode: 'number' }),
@@ -220,50 +243,70 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-// ─── Cards ─────────────────────────────────────────────────────────────────
+// ─── Cards (Lithic Card object) ──────────────────────────────────────────────
 
 export const cards = pgTable('cards', {
   id: serial('id').primaryKey(),
   accountId: integer('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
-  lithicCardToken: varchar('lithic_card_token', { length: 255 }).unique(),
+  lithicCardToken: varchar('lithic_card_token', { length: 255 }).unique(), // Lithic Card.token
+  type: cardTypeEnum('type').notNull().default('VIRTUAL'),
+  state: cardStateEnum('state').notNull().default('OPEN'),
   lastFour: varchar('last_four', { length: 4 }),
-  cardNumber: varchar('card_number', { length: 255 }), // tokenized/processor-held in a real system
+  cardNumber: varchar('card_number', { length: 255 }), // Lithic Card.pan — processor-held in production
   cvv: varchar('cvv', { length: 4 }), // sensitive — never returned to clients (see CardsService.sanitize)
-  expiryMonth: varchar('expiry_month', { length: 2 }),
-  expiryYear: varchar('expiry_year', { length: 4 }),
-  status: cardStatusEnum('status').notNull().default('active'),
+  expiryMonth: varchar('expiry_month', { length: 2 }), // Lithic Card.exp_month
+  expiryYear: varchar('expiry_year', { length: 4 }), // Lithic Card.exp_year
   spendLimit: decimal('spend_limit', { precision: 12, scale: 2 }),
-  spendLimitPeriod: varchar('spend_limit_period', { length: 20 }),
+  spendLimitDuration: spendLimitDurationEnum('spend_limit_duration'),
+  memo: varchar('memo', { length: 255 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// A Lithic Transaction (card). Amounts are integer minor units, like Lithic.
 export const cardTransactions = pgTable('card_transactions', {
   id: serial('id').primaryKey(),
   cardId: integer('card_id').notNull().references(() => cards.id, { onDelete: 'cascade' }),
-  // Links to the ledger journal created at settlement (populated once settled).
-  transactionId: integer('transaction_id').references(() => ledgerTransactions.id),
-  lithicTransactionToken: varchar('lithic_transaction_token', { length: 255 }).unique(),
-  merchantName: varchar('merchant_name', { length: 255 }),
+  token: varchar('token', { length: 255 }).unique(), // Lithic Transaction.token
+  // Links to the ledger journal created at CLEARING (populated once settled).
+  ledgerTransactionId: integer('ledger_transaction_id').references(() => ledgerTransactions.id),
+  status: transactionStatusEnum('status').notNull().default('PENDING'),
+  result: transactionResultEnum('result'),
+  amount: bigint('amount', { mode: 'number' }).notNull(), // requested amount (minor units)
+  authorizationAmount: bigint('authorization_amount', { mode: 'number' }), // held amount
+  settledAmount: bigint('settled_amount', { mode: 'number' }), // cleared amount
+  authorizationCode: varchar('authorization_code', { length: 50 }),
+  network: varchar('network', { length: 32 }),
+  merchantDescriptor: varchar('merchant_descriptor', { length: 255 }), // Lithic merchant.descriptor
+  merchantAcceptorId: varchar('merchant_acceptor_id', { length: 64 }),
   merchantMcc: varchar('merchant_mcc', { length: 4 }),
   merchantCity: varchar('merchant_city', { length: 100 }),
   merchantState: varchar('merchant_state', { length: 50 }),
-  merchantCountry: varchar('merchant_country', { length: 2 }),
-  amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
-  status: cardTransactionStatusEnum('status').notNull().default('authorized'),
-  authCode: varchar('auth_code', { length: 50 }),
+  merchantCountry: varchar('merchant_country', { length: 3 }),
   declinedReason: text('declined_reason'),
   metadata: text('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// The Lithic Transaction.events[] array — the network event lifecycle (AUTHORIZATION, CLEARING,
+// RETURN, …). Immutable, append-only.
+export const cardTransactionEvents = pgTable('card_transaction_events', {
+  id: serial('id').primaryKey(),
+  cardTransactionId: integer('card_transaction_id').notNull().references(() => cardTransactions.id, { onDelete: 'cascade' }),
+  token: varchar('token', { length: 255 }).notNull().unique(), // Lithic event token
+  type: cardEventTypeEnum('type').notNull(),
+  amount: bigint('amount', { mode: 'number' }).notNull(),
+  result: cardEventResultEnum('result').notNull(),
+  created: timestamp('created', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Partners & Connect (public partner-facing products) ─────────────────────
 //
 // The bank offers two products to outside companies (e.g. a gambling site), used purely
 // over HTTP — the partner never touches the bank's database directly:
-//   • Card acceptance ("Network"): authorize/capture a bank-issued card by PAN, like an acquirer.
-//   • Connect: a Plaid-style account-linking flow that lets a partner pull/push funds with consent.
+//   • Card acceptance ("Network"): authorize/clear a bank-issued card by PAN, like an acquirer.
+//   • Connect: a Plaid-style account-linking flow that moves funds via Lithic ACH Payments.
 
 // A third-party company integrating with the bank.
 export const partners = pgTable('partners', {
@@ -303,30 +346,49 @@ export const connectLinkSessions = pgTable('connect_link_sessions', {
 });
 
 // A durable access grant: the partner's long-lived permission to act on one linked account.
-// Only the hash of the access token is stored.
+// Only the hash of the access token is stored. The linked account is modeled as a Lithic
+// External Bank Account (its token is stored here).
 export const connectGrants = pgTable('connect_grants', {
   id: serial('id').primaryKey(),
   partnerId: integer('partner_id').notNull().references(() => partners.id, { onDelete: 'cascade' }),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   accountId: integer('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
   accessTokenHash: varchar('access_token_hash', { length: 64 }).notNull().unique(),
+  externalBankAccountToken: varchar('external_bank_account_token', { length: 255 }), // Lithic External Bank Account
   scopes: varchar('scopes', { length: 255 }).notNull().default('balances,transfers'),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-// ACH-style movements a Connect partner initiates against a linked account. A debit pulls funds
-// out to the partner; a credit (cash-out) pushes funds back in. Each maps to a ledger journal.
-export const connectTransfers = pgTable('connect_transfers', {
+// A Lithic ACH Payment — a Connect partner moving money on a linked account. DEBIT pulls funds
+// out to the partner; CREDIT (cash-out) pushes funds back in. Amounts are integer minor units.
+export const payments = pgTable('payments', {
   id: serial('id').primaryKey(),
-  grantId: integer('grant_id').notNull().references(() => connectGrants.id, { onDelete: 'cascade' }),
-  direction: connectTransferDirectionEnum('direction').notNull(),
-  amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
-  status: connectTransferStatusEnum('status').notNull().default('posted'),
-  description: text('description'),
+  token: varchar('token', { length: 255 }).notNull().unique(), // Lithic Payment.token
+  grantId: integer('grant_id').references(() => connectGrants.id, { onDelete: 'set null' }),
   ledgerTransactionId: integer('ledger_transaction_id').references(() => ledgerTransactions.id),
+  category: paymentCategoryEnum('category').notNull().default('ACH'),
+  direction: paymentDirectionEnum('direction').notNull(),
+  method: paymentMethodEnum('method').notNull().default('ACH_NEXT_DAY'),
+  status: paymentStatusEnum('status').notNull().default('PENDING'),
+  result: paymentResultEnum('result'),
+  amount: bigint('amount', { mode: 'number' }).notNull(),
+  financialAccountToken: varchar('financial_account_token', { length: 255 }),
+  externalBankAccountToken: varchar('external_bank_account_token', { length: 255 }),
   idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// The Lithic Payment.events[] — the ACH origination/return/receipt lifecycle.
+export const paymentEvents = pgTable('payment_events', {
+  id: serial('id').primaryKey(),
+  paymentId: integer('payment_id').notNull().references(() => payments.id, { onDelete: 'cascade' }),
+  token: varchar('token', { length: 255 }).notNull().unique(),
+  type: paymentEventTypeEnum('type').notNull(),
+  amount: bigint('amount', { mode: 'number' }).notNull(),
+  result: varchar('result', { length: 32 }),
+  created: timestamp('created', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ─── Relations ─────────────────────────────────────────────────────────────
@@ -369,9 +431,14 @@ export const cardsRelations = relations(cards, ({ one, many }) => ({
   cardTransactions: many(cardTransactions),
 }));
 
-export const cardTransactionsRelations = relations(cardTransactions, ({ one }) => ({
+export const cardTransactionsRelations = relations(cardTransactions, ({ one, many }) => ({
   card: one(cards, { fields: [cardTransactions.cardId], references: [cards.id] }),
-  transaction: one(ledgerTransactions, { fields: [cardTransactions.transactionId], references: [ledgerTransactions.id] }),
+  ledgerTransaction: one(ledgerTransactions, { fields: [cardTransactions.ledgerTransactionId], references: [ledgerTransactions.id] }),
+  events: many(cardTransactionEvents),
+}));
+
+export const cardTransactionEventsRelations = relations(cardTransactionEvents, ({ one }) => ({
+  cardTransaction: one(cardTransactions, { fields: [cardTransactionEvents.cardTransactionId], references: [cardTransactions.id] }),
 }));
 
 export const partnersRelations = relations(partners, ({ many }) => ({
@@ -386,11 +453,17 @@ export const partnerApiKeysRelations = relations(partnerApiKeys, ({ one }) => ({
 export const connectGrantsRelations = relations(connectGrants, ({ one, many }) => ({
   partner: one(partners, { fields: [connectGrants.partnerId], references: [partners.id] }),
   account: one(accounts, { fields: [connectGrants.accountId], references: [accounts.id] }),
-  transfers: many(connectTransfers),
+  payments: many(payments),
 }));
 
-export const connectTransfersRelations = relations(connectTransfers, ({ one }) => ({
-  grant: one(connectGrants, { fields: [connectTransfers.grantId], references: [connectGrants.id] }),
+export const paymentsRelations = relations(payments, ({ one, many }) => ({
+  grant: one(connectGrants, { fields: [payments.grantId], references: [connectGrants.id] }),
+  ledgerTransaction: one(ledgerTransactions, { fields: [payments.ledgerTransactionId], references: [ledgerTransactions.id] }),
+  events: many(paymentEvents),
+}));
+
+export const paymentEventsRelations = relations(paymentEvents, ({ one }) => ({
+  payment: one(payments, { fields: [paymentEvents.paymentId], references: [payments.id] }),
 }));
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -423,6 +496,8 @@ export type Card = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
 export type CardTransaction = typeof cardTransactions.$inferSelect;
 export type NewCardTransaction = typeof cardTransactions.$inferInsert;
+export type CardTransactionEvent = typeof cardTransactionEvents.$inferSelect;
+export type NewCardTransactionEvent = typeof cardTransactionEvents.$inferInsert;
 export type OtpCode = typeof otpCodes.$inferSelect;
 export type NewOtpCode = typeof otpCodes.$inferInsert;
 export type Partner = typeof partners.$inferSelect;
@@ -433,5 +508,7 @@ export type ConnectLinkSession = typeof connectLinkSessions.$inferSelect;
 export type NewConnectLinkSession = typeof connectLinkSessions.$inferInsert;
 export type ConnectGrant = typeof connectGrants.$inferSelect;
 export type NewConnectGrant = typeof connectGrants.$inferInsert;
-export type ConnectTransfer = typeof connectTransfers.$inferSelect;
-export type NewConnectTransfer = typeof connectTransfers.$inferInsert;
+export type Payment = typeof payments.$inferSelect;
+export type NewPayment = typeof payments.$inferInsert;
+export type PaymentEvent = typeof paymentEvents.$inferSelect;
+export type NewPaymentEvent = typeof paymentEvents.$inferInsert;

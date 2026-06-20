@@ -88,17 +88,26 @@ pnpm dev
   - Account linked
 - Note: Full card number is shown (sandbox only!)
 
-### 4.3 Simulate a Card Transaction
-- In Cards page, click "Simulate Transaction" on the Demo Card
-- Enter:
-  - Amount: `$50`
-  - Merchant: "Coffee Shop"
-- Submit
-- The transaction is processed through Lithic sandbox
-- Verify:
-  - Card transaction appears in card details
-  - Checking account balance decreased by $50
-  - Transaction appears in Transactions page
+### 4.3 Charge the Card (Network / acquirer API)
+Cards are charged the way a real merchant would — through the bank's card-acceptance ("Network")
+API, which routes to the Lithic processor. The processor creates a **Transaction**, asks the
+program to approve it in real time via **ASA** (which places an authorization hold), then the
+merchant captures it (**CLEARING**) to settle.
+
+```bash
+# Authorize — ASA decisions this and places a hold (reduces available, not posted balance)
+curl -X POST http://localhost:3000/api/network/authorizations \
+  -H "Authorization: Bearer sk_test_luckyspin_dev" -H "Content-Type: application/json" \
+  -d '{ "card": { "number": "4111111111111111", "expMonth": "12", "expYear": "2030", "cvv": "123" },
+        "amount": 5000, "currency": "USD", "merchant": { "name": "Coffee Shop", "mcc": "5814" } }'
+# → { "id": "txn_…", "approved": true, "authCode": "…" }
+
+# Capture — emits a CLEARING event and settles to the ledger (card_clearing)
+curl -X POST http://localhost:3000/api/network/authorizations/<txn_token>/capture \
+  -H "Authorization: Bearer sk_test_luckyspin_dev" -H "Content-Type: application/json" -d '{}'
+```
+- Verify: the card's transactions show the Lithic Transaction with its `events[]`
+  (`AUTHORIZATION` → `CLEARING`); the checking balance settles; the activity appears in Transactions.
 
 ### 4.4 Freeze/Unfreeze Card
 - Click "Freeze" on the Demo Card
@@ -152,40 +161,47 @@ pnpm dev
 
 ## Flow 8: Webhooks (Lithic)
 
-### 8.1 Simulate Authorization Webhook
+The bank consumes Lithic's real webhook events (`transaction.created`, `transaction.updated`,
+`payment_transaction.created`, `payment_transaction.updated`, `card.created`, `card.updated`) and
+posts to the ledger based on the network event type in `payload.events[]` (e.g. `CLEARING` →
+`card_clearing`, `RETURN` → `return`, `ACH_ORIGINATION_SETTLED` → `ach_debit`/`ach_credit`). In mock
+mode the processor dispatches these in-process; the endpoint below is for real Lithic delivery,
+which is **Svix-signed** (headers `webhook-id`, `webhook-timestamp`, `webhook-signature`; secret
+`whsec_…`, set via `LITHIC_WEBHOOK_SECRET`).
+
+### 8.1 Transaction cleared (settlement)
 ```bash
 curl -X POST http://localhost:3000/api/webhooks/lithic \
   -H "Content-Type: application/json" \
   -d '{
-    "event_type": "card_transaction.authorization",
+    "id": "evt_001",
+    "type": "transaction.updated",
     "payload": {
-      "token": "txn-demo-001",
-      "card_token": "<your-card-token>",
-      "amount": 2500,
-      "merchant": {
-        "name": "Test Merchant",
-        "mcc": "5411"
-      },
-      "status": "APPROVED"
+      "token": "txn_demo-001",
+      "account_token": "account_1",
+      "card_token": "card_…",
+      "amount": 2500, "settled_amount": 2500,
+      "status": "SETTLED", "result": "APPROVED",
+      "merchant": { "descriptor": "Test Merchant", "mcc": "5411" },
+      "events": [
+        { "token": "e1", "type": "AUTHORIZATION", "amount": 2500, "result": "APPROVED" },
+        { "token": "e2", "type": "CLEARING", "amount": 2500, "result": "APPROVED" }
+      ]
     }
   }'
 ```
 
-### 8.2 Simulate Settlement Webhook
+### 8.2 ACH payment settled
 ```bash
 curl -X POST http://localhost:3000/api/webhooks/lithic \
   -H "Content-Type: application/json" \
   -d '{
-    "event_type": "card_transaction.settlement",
+    "id": "evt_002",
+    "type": "payment_transaction.updated",
     "payload": {
-      "token": "txn-demo-001",
-      "card_token": "<your-card-token>",
-      "amount": 2500,
-      "merchant": {
-        "name": "Test Merchant",
-        "mcc": "5411"
-      },
-      "status": "SETTLED"
+      "token": "pmt_demo-001", "category": "ACH", "direction": "DEBIT",
+      "status": "SETTLED", "financial_account_token": "account_1", "amount": 2500,
+      "events": [ { "token": "pe1", "type": "ACH_ORIGINATION_SETTLED", "amount": 2500, "result": "APPROVED" } ]
     }
   }'
 ```

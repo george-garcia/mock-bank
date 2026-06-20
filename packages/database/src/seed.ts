@@ -117,12 +117,13 @@ async function seed() {
     await db.insert(cards).values({
       accountId: aliceCheckingId,
       lithicCardToken: 'seed-card-alice',
+      type: 'VIRTUAL',
       lastFour: '1111',
       cardNumber: '4111111111111111',
       cvv: '123',
       expiryMonth: '12',
       expiryYear: '2030',
-      status: 'active',
+      state: 'OPEN',
     });
     console.log('Created 1 test card for Alice (checking)');
   }

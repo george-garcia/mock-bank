@@ -5,13 +5,11 @@ import {
   partners,
   connectLinkSessions,
   connectGrants,
-  connectTransfers,
   NewConnectLinkSession,
   NewConnectGrant,
-  NewConnectTransfer,
 } from '@mock-bank/database';
 
-/** Persistence for the Connect flow: link sessions, access grants, and transfers. */
+/** Persistence for the Connect flow: link sessions and access grants. */
 @Injectable()
 export class ConnectRepository {
   async createLinkSession(values: NewConnectLinkSession) {
@@ -53,16 +51,6 @@ export class ConnectRepository {
       .select()
       .from(connectGrants)
       .where(and(eq(connectGrants.accessTokenHash, accessTokenHash), isNull(connectGrants.revokedAt)));
-    return row || null;
-  }
-
-  async createTransfer(values: NewConnectTransfer) {
-    const [row] = await db.insert(connectTransfers).values(values).returning();
-    return row;
-  }
-
-  async findTransferByIdempotencyKey(key: string) {
-    const [row] = await db.select().from(connectTransfers).where(eq(connectTransfers.idempotencyKey, key));
     return row || null;
   }
 }

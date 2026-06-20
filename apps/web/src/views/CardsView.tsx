@@ -167,14 +167,14 @@ export function CardsView({
                     </div>
                     <Badge
                       variant={
-                        card.status === 'active'
+                        card.state === 'OPEN'
                           ? 'success'
-                          : card.status === 'frozen'
+                          : card.state === 'PAUSED'
                           ? 'warning'
                           : 'danger'
                       }
                     >
-                      {card.status}
+                      {card.state}
                     </Badge>
                   </div>
 
@@ -194,7 +194,7 @@ export function CardsView({
                   </div>
 
                   <div className="flex flex-wrap gap-2 pt-4 border-t border-white/5">
-                    {card.status === 'active' && (
+                    {card.state === 'OPEN' && (
                       <Button
                         variant="secondary"
                         size="sm"
@@ -213,7 +213,7 @@ export function CardsView({
                       <Receipt className="w-4 h-4 mr-1.5" />
                       Transactions
                     </Button>
-                    {card.status !== 'cancelled' && (
+                    {card.state !== 'CLOSED' && (
                       revealed[card.id] ? (
                         <Button variant="ghost" size="sm" onClick={() => hideCard(card.id)}>
                           <EyeOff className="w-4 h-4 mr-1.5" />
@@ -231,7 +231,7 @@ export function CardsView({
                         </Button>
                       )
                     )}
-                    {card.status === 'frozen' && (
+                    {card.state === 'PAUSED' && (
                       <Button
                         variant="secondary"
                         size="sm"
@@ -242,7 +242,7 @@ export function CardsView({
                         Unfreeze
                       </Button>
                     )}
-                    {card.status !== 'cancelled' && (
+                    {card.state !== 'CLOSED' && (
                       <Button
                         variant="danger"
                         size="sm"

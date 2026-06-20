@@ -46,46 +46,48 @@ export function CardTransactionsModal({ cardId, cardLastFour, onClose }: CardTra
             </div>
           ) : (
             <div className="space-y-4">
-              {transactions.map((tx: any, index: number) => (
-                <div
-                  key={tx.id}
-                  className="flex items-center justify-between p-5 bg-surface-highlight/50 hover:bg-surface-highlight border border-white/5 rounded-xl transition-all animate-slide-up"
-                  style={{ animationDelay: `${index * 0.03}s` }}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center border border-accent/10">
-                      <Receipt className="w-5 h-5 text-accent-light" />
+              {transactions.map((tx: any, index: number) => {
+                // Lithic Transaction object: events[] drive direction; amounts are minor units.
+                const events: any[] = tx.events ?? [];
+                const latestEvent = events.length ? events[events.length - 1].type : tx.status;
+                const isCredit = events.some((e) => e.type === 'RETURN' || e.type === 'CREDIT_AUTHORIZATION');
+                const dollars = (Number(tx.amount) / 100).toFixed(2);
+                const statusVariant =
+                  tx.status === 'SETTLED' ? 'success'
+                  : tx.status === 'DECLINED' ? 'danger'
+                  : tx.status === 'VOIDED' ? 'default'
+                  : 'warning';
+                return (
+                  <div
+                    key={tx.token}
+                    className="flex items-center justify-between p-5 bg-surface-highlight/50 hover:bg-surface-highlight border border-white/5 rounded-xl transition-all animate-slide-up"
+                    style={{ animationDelay: `${index * 0.03}s` }}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center border border-accent/10">
+                        <Receipt className="w-5 h-5 text-accent-light" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-content text-lg">
+                          {tx.merchant?.descriptor || 'Unknown merchant'}
+                        </p>
+                        <p className="text-sm text-content-muted font-mono mt-1">
+                          {new Date(tx.created).toLocaleDateString()} at {new Date(tx.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        <p className="text-xs text-accent-light/70 mt-1 uppercase tracking-wider font-semibold">
+                          {String(latestEvent).replace(/_/g, ' ')}{tx.merchant?.mcc ? ` · MCC ${tx.merchant.mcc}` : ''}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-content text-lg">
-                        {tx.merchantName || 'Unknown merchant'}
+                    <div className="text-right">
+                      <p className={`font-display font-bold text-xl mb-2 ${isCredit ? 'text-success' : 'text-content'}`}>
+                        {isCredit ? '+' : '−'}${dollars}
                       </p>
-                      <p className="text-sm text-content-muted font-mono mt-1">
-                        {new Date(tx.createdAt).toLocaleDateString()} at {new Date(tx.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </p>
-                      {tx.merchantCategory && (
-                        <p className="text-xs text-accent-light/70 mt-1 uppercase tracking-wider font-semibold">{tx.merchantCategory}</p>
-                      )}
+                      <Badge variant={statusVariant as any}>{tx.status}</Badge>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-display font-bold text-xl text-content mb-2">
-                      -${parseFloat(tx.amount).toFixed(2)}
-                    </p>
-                    <Badge
-                      variant={
-                        tx.status === 'approved'
-                          ? 'success'
-                          : tx.status === 'declined'
-                          ? 'danger'
-                          : 'warning'
-                      }
-                    >
-                      {tx.status}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

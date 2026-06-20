@@ -13,8 +13,8 @@ import {
 
 export type LedgerSide = 'debit' | 'credit';
 export type LedgerTxnType =
-  | 'deposit' | 'withdrawal' | 'transfer' | 'card_settlement'
-  | 'card_auth' | 'reversal' | 'refund' | 'fee' | 'adjustment';
+  | 'deposit' | 'withdrawal' | 'transfer' | 'card_clearing'
+  | 'return' | 'ach_debit' | 'ach_credit' | 'reversal' | 'fee' | 'adjustment';
 
 export interface PostEntry {
   ledgerAccountId: number;
@@ -85,7 +85,7 @@ export class LedgerRepository {
   async placeHold(input: {
     ledgerAccountId: number;
     amountMinor: number;
-    type: 'card_auth' | 'manual';
+    type: 'authorization' | 'manual';
     externalRef?: string;
     expiresAt?: Date;
     metadata?: Record<string, unknown>;

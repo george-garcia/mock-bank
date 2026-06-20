@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { eq, desc } from 'drizzle-orm';
-import { db, cards, cardTransactions, NewCard, NewCardTransaction } from '@mock-bank/database';
+import { db, cards, NewCard } from '@mock-bank/database';
+
+type CardState = 'OPEN' | 'PAUSED' | 'CLOSED' | 'PENDING_ACTIVATION' | 'PENDING_FULFILLMENT';
 
 @Injectable()
 export class CardsRepository {
@@ -29,49 +31,13 @@ export class CardsRepository {
     return db.select().from(cards).where(eq(cards.accountId, accountId)).orderBy(desc(cards.createdAt));
   }
 
-  async updateStatus(id: number, status: 'active' | 'frozen' | 'cancelled') {
+  /** Update the Lithic card state (OPEN / PAUSED / CLOSED). */
+  async updateState(id: number, state: CardState) {
     const [card] = await db
       .update(cards)
-      .set({ status, updatedAt: new Date() })
+      .set({ state, updatedAt: new Date() })
       .where(eq(cards.id, id))
       .returning();
     return card;
-  }
-
-  // Card transactions
-  async createCardTransaction(data: NewCardTransaction) {
-    const [tx] = await db.insert(cardTransactions).values(data).returning();
-    return tx;
-  }
-
-  async findCardTransactionById(id: number) {
-    const [tx] = await db.select().from(cardTransactions).where(eq(cardTransactions.id, id));
-    return tx || null;
-  }
-
-  async findCardTransactionByLithicToken(token: string) {
-    const [tx] = await db.select().from(cardTransactions).where(eq(cardTransactions.lithicTransactionToken, token));
-    return tx || null;
-  }
-
-  async findCardTransactionsByCardId(cardId: number) {
-    return db
-      .select()
-      .from(cardTransactions)
-      .where(eq(cardTransactions.cardId, cardId))
-      .orderBy(desc(cardTransactions.createdAt));
-  }
-
-  async updateCardTransactionStatus(
-    id: number,
-    status: 'authorized' | 'declined' | 'settled' | 'voided',
-    transactionId?: number,
-  ) {
-    const [tx] = await db
-      .update(cardTransactions)
-      .set({ status, ...(transactionId !== undefined ? { transactionId } : {}), updatedAt: new Date() })
-      .where(eq(cardTransactions.id, id))
-      .returning();
-    return tx;
   }
 }

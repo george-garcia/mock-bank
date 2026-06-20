@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CardsService } from '../cards.service';
 import { CardsRepository } from '../cards.repository';
+import { LithicRepository } from '../../lithic/lithic.repository';
 import { AccountsService } from '../../accounts/accounts.service';
 import { LithicService } from '../../lithic/lithic.service';
 import { AuditService } from '../../audit/audit.service';
@@ -31,11 +32,13 @@ describe('CardsService', () => {
     findById: jest.fn(),
     findByAccountId: jest.fn(),
     findByLithicToken: jest.fn(),
-    updateStatus: jest.fn(),
-    createCardTransaction: jest.fn(),
-    findCardTransactionsByCardId: jest.fn(),
-    findCardTransactionByLithicToken: jest.fn(),
-    updateCardTransactionStatus: jest.fn(),
+    findByPan: jest.fn(),
+    updateState: jest.fn(),
+  };
+
+  const mockLithicRepo = {
+    findTransactionsByCardId: jest.fn().mockResolvedValue([]),
+    eventsForTransactions: jest.fn().mockResolvedValue([]),
   };
 
   const mockAccountsService = {
@@ -47,8 +50,8 @@ describe('CardsService', () => {
 
   const mockLithicService = {
     createCard: jest.fn(),
-    getCard: jest.fn(),
     updateCardState: jest.fn(),
+    toTransaction: jest.fn(),
   };
 
   const mockAuditService = {
@@ -60,6 +63,7 @@ describe('CardsService', () => {
       providers: [
         CardsService,
         { provide: CardsRepository, useValue: mockCardsRepo },
+        { provide: LithicRepository, useValue: mockLithicRepo },
         { provide: AccountsService, useValue: mockAccountsService },
         { provide: LithicService, useValue: mockLithicService },
         { provide: AuditService, useValue: mockAuditService },
@@ -81,10 +85,12 @@ describe('CardsService', () => {
   describe('createCard', () => {
     it('should create a virtual card', async () => {
       mockAccountsService.findOne.mockResolvedValue({ id: 1, userId: 1 });
-      mockLithicService.createCard.mockResolvedValue({
-        token: 'mock-card-1',
+      mockLithicService.createCard.mockReturnValue({
+        token: 'card_mock-1',
+        type: 'VIRTUAL',
         last_four: '1234',
-        card_number: '4111111111111234',
+        pan: '4111111111111234',
+        cvv: '321',
         exp_month: '12',
         exp_year: '2028',
         state: 'OPEN',
@@ -165,25 +171,25 @@ describe('CardsService', () => {
     it('should freeze an active card', async () => {
       mockCardsRepo.findById.mockResolvedValue(mockCard);
       mockAccountsService.findOne.mockResolvedValue({ id: 1, userId: 1 });
-      mockLithicService.updateCardState.mockResolvedValue({ ...mockCard, state: 'PAUSED' });
-      mockCardsRepo.updateStatus.mockResolvedValue({ ...mockCard, status: 'frozen' });
+      mockLithicService.updateCardState.mockResolvedValue({ token: 'card_mock-1', state: 'PAUSED' });
+      mockCardsRepo.updateState.mockResolvedValue({ ...mockCard, state: 'PAUSED' });
 
       const result = await service.freezeCard(1, 1);
 
-      expect(result.status).toBe('frozen');
+      expect(result.state).toBe('PAUSED');
     });
   });
 
   describe('unfreezeCard', () => {
-    it('should unfreeze a frozen card', async () => {
-      mockCardsRepo.findById.mockResolvedValue({ ...mockCard, status: 'frozen' });
+    it('should unfreeze a paused card', async () => {
+      mockCardsRepo.findById.mockResolvedValue({ ...mockCard, state: 'PAUSED' });
       mockAccountsService.findOne.mockResolvedValue({ id: 1, userId: 1 });
-      mockLithicService.updateCardState.mockResolvedValue({ ...mockCard, state: 'OPEN' });
-      mockCardsRepo.updateStatus.mockResolvedValue({ ...mockCard, status: 'active' });
+      mockLithicService.updateCardState.mockResolvedValue({ token: 'card_mock-1', state: 'OPEN' });
+      mockCardsRepo.updateState.mockResolvedValue({ ...mockCard, state: 'OPEN' });
 
       const result = await service.unfreezeCard(1, 1);
 
-      expect(result.status).toBe('active');
+      expect(result.state).toBe('OPEN');
     });
   });
 
@@ -191,12 +197,12 @@ describe('CardsService', () => {
     it('should cancel a card', async () => {
       mockCardsRepo.findById.mockResolvedValue(mockCard);
       mockAccountsService.findOne.mockResolvedValue({ id: 1, userId: 1 });
-      mockLithicService.updateCardState.mockResolvedValue({ ...mockCard, state: 'CLOSED' });
-      mockCardsRepo.updateStatus.mockResolvedValue({ ...mockCard, status: 'cancelled' });
+      mockLithicService.updateCardState.mockResolvedValue({ token: 'card_mock-1', state: 'CLOSED' });
+      mockCardsRepo.updateState.mockResolvedValue({ ...mockCard, state: 'CLOSED' });
 
       const result = await service.cancelCard(1, 1);
 
-      expect(result.status).toBe('cancelled');
+      expect(result.state).toBe('CLOSED');
     });
   });
 });

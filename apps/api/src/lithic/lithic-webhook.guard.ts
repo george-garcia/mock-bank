@@ -3,9 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'crypto';
 
 /**
- * Verifies inbound Lithic webhooks via an HMAC-SHA256 signature over the raw request body.
- * If LITHIC_WEBHOOK_SECRET is unset (mock/dev), verification is skipped with a warning —
- * in production the secret must be set so forged events are rejected.
+ * Verifies inbound Lithic webhooks using Lithic's real signing scheme (Svix). Each request carries
+ * `webhook-id`, `webhook-timestamp`, and `webhook-signature` headers; the secret is `whsec_<base64>`.
+ * The signature is base64(HMAC-SHA256(secret, `${id}.${timestamp}.${rawBody}`)). The header may list
+ * several space-delimited `v1,<sig>` entries; any match passes (constant-time compare).
+ *
+ * If LITHIC_WEBHOOK_SECRET is unset (mock/dev), verification is skipped with a warning.
  */
 @Injectable()
 export class LithicWebhookGuard implements CanActivate {
@@ -21,16 +24,23 @@ export class LithicWebhookGuard implements CanActivate {
     }
 
     const req = ctx.switchToHttp().getRequest();
-    const signature: string | undefined = req.headers['x-lithic-webhook-signature'];
+    const id: string | undefined = req.headers['webhook-id'];
+    const timestamp: string | undefined = req.headers['webhook-timestamp'];
+    const signatureHeader: string | undefined = req.headers['webhook-signature'];
     const raw: Buffer | undefined = req.rawBody;
-    if (!signature || !raw) {
-      throw new UnauthorizedException('Missing webhook signature');
+    if (!id || !timestamp || !signatureHeader || !raw) {
+      throw new UnauthorizedException('Missing webhook signature headers');
     }
 
-    const expected = createHmac('sha256', secret).update(raw).digest('hex');
-    if (!this.safeEqual(signature, expected)) {
-      throw new UnauthorizedException('Invalid webhook signature');
-    }
+    // The signing key is the base64 portion after the `whsec_` prefix.
+    const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+    const signedContent = `${id}.${timestamp}.${raw.toString('utf8')}`;
+    const expected = createHmac('sha256', key).update(signedContent).digest('base64');
+
+    // The header is a space-delimited list of `version,signature` (e.g. `v1,<base64>`).
+    const provided = signatureHeader.split(' ').map((part) => part.split(',')[1] ?? part);
+    const ok = provided.some((sig) => this.safeEqual(sig, expected));
+    if (!ok) throw new UnauthorizedException('Invalid webhook signature');
     return true;
   }
 

@@ -79,12 +79,12 @@ export function TransactionsView({
                 >
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105 ${
-                      tx.type === 'deposit' || tx.type === 'transfer'
+                      ['deposit', 'transfer', 'ach_credit', 'return'].includes(tx.type)
                         ? 'bg-success/10 border border-success/20'
                         : 'bg-danger/10 border border-danger/20'
                     }`}>
                       <ArrowLeftRight className={`w-5 h-5 ${
-                        tx.type === 'deposit' || tx.type === 'transfer'
+                        ['deposit', 'transfer', 'ach_credit', 'return'].includes(tx.type)
                           ? 'text-success-light'
                           : 'text-danger-light'
                       }`} />
@@ -100,11 +100,11 @@ export function TransactionsView({
                   </div>
                   <div className="text-right">
                     <p className={`font-display font-bold text-xl mb-1 ${
-                      tx.type === 'deposit' || tx.type === 'transfer'
+                      ['deposit', 'transfer', 'ach_credit', 'return'].includes(tx.type)
                         ? 'text-success-light'
                         : 'text-danger-light'
                     }`}>
-                      {tx.type === 'deposit' || tx.type === 'transfer' ? '+' : '-'}${parseFloat(tx.amount).toFixed(2)}
+                      {['deposit', 'transfer', 'ach_credit', 'return'].includes(tx.type) ? '+' : '-'}${Math.abs(parseFloat(tx.amount)).toFixed(2)}
                     </p>
                     <Badge variant={tx.status === 'completed' ? 'success' : 'warning'}>
                       {tx.status}

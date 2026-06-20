@@ -54,7 +54,7 @@ export class LedgerService {
     return this.repo.placeHold({
       ledgerAccountId,
       amountMinor: minor,
-      type: 'card_auth',
+      type: 'authorization',
       externalRef: input.externalRef,
       expiresAt: input.expiresAt,
       metadata: input.metadata,
@@ -118,14 +118,17 @@ export class LedgerService {
     });
   }
 
-  /** Forced post: a settlement clears even if it overdraws the account (P1 adds holds). */
-  async cardSettlement(accountId: number, input: MoveInput) {
+  /**
+   * Card CLEARING — post a settled card purchase. Forced post: a clearing posts even if it
+   * overdraws (the auth hold normally guarantees funds). Debit the cardholder, credit card_network.
+   */
+  async cardClearing(accountId: number, input: MoveInput) {
     const minor = this.requirePositive(input.amount);
     const customer = await this.requireCustomer(accountId);
     const network = await this.repo.systemLedgerAccountId('card_network');
     return this.repo.post({
       idempotencyKey: input.idempotencyKey ?? randomUUID(),
-      type: 'card_settlement',
+      type: 'card_clearing',
       description: input.description,
       allowNegative: true,
       entries: [
@@ -135,14 +138,14 @@ export class LedgerService {
     });
   }
 
-  /** Merchant credit / card refund: money flows back to the account (credit customer). */
-  async refund(accountId: number, input: MoveInput) {
+  /** Card RETURN (merchant credit): money flows back to the cardholder (credit customer). */
+  async cardReturn(accountId: number, input: MoveInput) {
     const minor = this.requirePositive(input.amount);
     const customer = await this.requireCustomer(accountId);
     const network = await this.repo.systemLedgerAccountId('card_network');
     return this.repo.post({
       idempotencyKey: input.idempotencyKey ?? randomUUID(),
-      type: 'refund',
+      type: 'return',
       description: input.description,
       entries: [
         { ledgerAccountId: network, direction: 'debit', amountMinor: minor },
@@ -161,7 +164,7 @@ export class LedgerService {
     const clearing = await this.repo.systemLedgerAccountId('ach_clearing');
     return this.repo.post({
       idempotencyKey: input.idempotencyKey ?? randomUUID(),
-      type: 'withdrawal',
+      type: 'ach_debit',
       description: input.description,
       entries: [
         { ledgerAccountId: customer, direction: 'debit', amountMinor: minor },
@@ -177,7 +180,7 @@ export class LedgerService {
     const clearing = await this.repo.systemLedgerAccountId('ach_clearing');
     return this.repo.post({
       idempotencyKey: input.idempotencyKey ?? randomUUID(),
-      type: 'deposit',
+      type: 'ach_credit',
       description: input.description,
       entries: [
         { ledgerAccountId: clearing, direction: 'debit', amountMinor: minor },

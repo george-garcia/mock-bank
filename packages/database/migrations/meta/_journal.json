@@ -5,64 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1781681522871,
-      "tag": "0000_sparkling_anita_blake",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1781747142095,
-      "tag": "0001_youthful_starfox",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1781799530899,
-      "tag": "0002_red_malcolm_colcord",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1781804833715,
-      "tag": "0003_amazing_wallflower",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1781820375735,
-      "tag": "0004_goofy_madripoor",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1781827448069,
-      "tag": "0005_amazing_karnak",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1781841855050,
-      "tag": "0006_last_groot",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1781852898621,
-      "tag": "0007_nifty_jubilee",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1781858077317,
-      "tag": "0008_left_ozymandias",
+      "when": 1781934719129,
+      "tag": "0000_classy_electro",
       "breakpoints": true
     }
   ]

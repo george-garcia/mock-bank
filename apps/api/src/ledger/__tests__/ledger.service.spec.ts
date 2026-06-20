@@ -109,16 +109,16 @@ describe('LedgerService', () => {
     });
   });
 
-  describe('cardSettlement', () => {
+  describe('cardClearing', () => {
     it('posts debit customer, credit card_network and allows overdraft', async () => {
       repo.customerLedgerAccountId.mockResolvedValue(10);
       repo.systemLedgerAccountId.mockResolvedValue(2); // card_network
 
-      await service.cardSettlement(5, { amount: '9.99', idempotencyKey: 'card_settlement:tok' });
+      await service.cardClearing(5, { amount: '9.99', idempotencyKey: 'card_clearing:tok' });
 
       expect(repo.post).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'card_settlement',
+          type: 'card_clearing',
           allowNegative: true,
           entries: [
             { ledgerAccountId: 10, direction: 'debit', amountMinor: 999 },
@@ -129,16 +129,16 @@ describe('LedgerService', () => {
     });
   });
 
-  describe('refund', () => {
+  describe('cardReturn', () => {
     it('credits the customer and debits card_network (money back to the account)', async () => {
       repo.customerLedgerAccountId.mockResolvedValue(10);
       repo.systemLedgerAccountId.mockResolvedValue(2); // card_network
 
-      await service.refund(5, { amount: '12.34', idempotencyKey: 'refund:tok' });
+      await service.cardReturn(5, { amount: '12.34', idempotencyKey: 'return:tok' });
 
       expect(repo.post).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'refund',
+          type: 'return',
           entries: [
             { ledgerAccountId: 2, direction: 'debit', amountMinor: 1234 },
             { ledgerAccountId: 10, direction: 'credit', amountMinor: 1234 },
@@ -210,9 +210,9 @@ describe('LedgerService', () => {
   describe('holds', () => {
     it('placeHold resolves the customer ledger account and reserves funds', async () => {
       repo.customerLedgerAccountId.mockResolvedValue(10);
-      await service.placeHold(5, { amount: '40.00', externalRef: 'card_auth:tok' });
+      await service.placeHold(5, { amount: '40.00', externalRef: 'auth:tok' });
       expect(repo.placeHold).toHaveBeenCalledWith(
-        expect.objectContaining({ ledgerAccountId: 10, amountMinor: 4000, type: 'card_auth', externalRef: 'card_auth:tok' }),
+        expect.objectContaining({ ledgerAccountId: 10, amountMinor: 4000, type: 'authorization', externalRef: 'auth:tok' }),
       );
     });
 
