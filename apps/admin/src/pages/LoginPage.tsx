@@ -4,7 +4,7 @@ import { Input } from '../components/ui/Input';
 import { Shield } from 'lucide-react';
 
 export function LoginPage() {
-  const { isLoading, error, form, setForm, handleSubmit } = useLogin();
+  const { isLoading, error, form, setForm, handleSubmit, demoLogin } = useLogin();
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
@@ -52,6 +52,15 @@ export function LoginPage() {
               Sign in to console
             </Button>
           </form>
+
+          <button
+            type="button"
+            onClick={demoLogin}
+            disabled={isLoading}
+            className="mt-3 w-full rounded-xl border border-accent/30 bg-accent/5 py-2.5 text-sm font-medium text-accent-light transition-colors hover:bg-accent/10 disabled:opacity-60"
+          >
+            Explore a demo console →
+          </button>
 
           <p className="mt-6 text-center text-xs text-content-subtle">
             Staff accounts are separate from customer logins.

@@ -26,5 +26,23 @@ export function useLogin() {
     }
   };
 
-  return { isLoading, error, form, setForm, handleSubmit };
+  // One-click sign-in as the pre-seeded recruiter demo staff account.
+  const demoLogin = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const result = await authApi.login({
+        email: 'admin-recruiter@demo.com',
+        password: (import.meta as any).env?.VITE_DEMO_PASSWORD || '',
+      });
+      setAuth(result.staff);
+      navigate('/');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Demo sign-in is unavailable right now.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { isLoading, error, form, setForm, handleSubmit, demoLogin };
 }

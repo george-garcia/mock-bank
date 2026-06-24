@@ -17,6 +17,7 @@ export function LoginPage() {
     handleSubmit,
     handleVerify,
     resetToCredentials,
+    demoLogin,
   } = useLogin();
 
   return (
@@ -125,6 +126,17 @@ export function LoginPage() {
                   {isLogin ? 'Sign in to Mock Bank' : 'Create secure account'}
                 </Button>
               </form>
+
+              {isLogin && (
+                <button
+                  type="button"
+                  onClick={demoLogin}
+                  disabled={isLoading}
+                  className="mt-3 w-full rounded-xl border border-primary/30 bg-primary/5 py-2.5 text-sm font-medium text-primary-light transition-colors hover:bg-primary/10 disabled:opacity-60"
+                >
+                  Explore a demo account →
+                </button>
+              )}
 
               <div className="mt-8 text-center border-t border-white/5 pt-6">
                 <button

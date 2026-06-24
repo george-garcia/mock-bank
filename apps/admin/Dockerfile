@@ -8,6 +8,8 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @mock-bank/types build
 ARG VITE_ADMIN_API_URL=http://localhost:4001/api
 ENV VITE_ADMIN_API_URL=$VITE_ADMIN_API_URL
+ARG VITE_DEMO_PASSWORD=
+ENV VITE_DEMO_PASSWORD=$VITE_DEMO_PASSWORD
 RUN pnpm --filter @mock-bank/admin build
 
 FROM nginx:1.27-alpine

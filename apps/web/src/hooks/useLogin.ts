@@ -22,6 +22,27 @@ export function useLogin() {
     navigate('/');
   };
 
+  // One-click sign-in as the pre-seeded recruiter demo customer.
+  const demoLogin = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const result = await authApi.login({
+        email: 'recruiter@demo.com',
+        password: (import.meta as any).env?.VITE_DEMO_PASSWORD || '',
+      });
+      if (result.requiresTwoFactor) {
+        setChallenge({ token: result.challengeToken, method: result.method });
+        return;
+      }
+      completeAuth(result.user);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Demo sign-in is unavailable right now.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -87,5 +108,6 @@ export function useLogin() {
     handleSubmit,
     handleVerify,
     resetToCredentials,
+    demoLogin,
   };
 }
