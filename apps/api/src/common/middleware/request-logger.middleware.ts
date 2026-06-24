@@ -6,31 +6,23 @@ export class RequestLoggerMiddleware implements NestMiddleware {
   private readonly logger = new Logger('HTTP');
 
   use(req: Request, res: Response, next: NextFunction) {
-    const { method, originalUrl, ip } = req;
-    const userAgent = req.get('user-agent') || 'unknown';
+    const { method, originalUrl } = req;
     const start = Date.now();
 
     res.on('finish', () => {
-      const { statusCode } = res;
-      const contentLength = res.get('content-length') || 0;
-      const duration = Date.now() - start;
+      // Health checks are polled constantly; keep them out of the access log.
+      if (originalUrl === '/api/auth/health') return;
 
-      const logData = {
-        method,
-        url: originalUrl,
-        statusCode,
-        contentLength,
-        duration: `${duration}ms`,
-        ip,
-        userAgent,
-      };
+      const { statusCode } = res;
+      const duration = Date.now() - start;
+      const line = `${method} ${originalUrl} ${statusCode} (${duration}ms)`;
 
       if (statusCode >= 500) {
-        this.logger.error(`Request failed`, JSON.stringify(logData));
+        this.logger.error(line);
       } else if (statusCode >= 400) {
-        this.logger.warn(`Request warning`, JSON.stringify(logData));
+        this.logger.warn(line);
       } else {
-        this.logger.log(`Request completed`, JSON.stringify(logData));
+        this.logger.log(line);
       }
     });
 

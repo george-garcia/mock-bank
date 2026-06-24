@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { AccountsService } from '../accounts/accounts.service';
@@ -18,6 +18,7 @@ interface DepositOptions {
 
 @Injectable()
 export class DepositsService {
+  private readonly logger = new Logger(DepositsService.name);
   private readonly clearSeconds: number;
 
   constructor(
@@ -52,6 +53,9 @@ export class DepositsService {
         amountMinor: toMinor(amount),
         metadata: { source, transactionId: transaction.transaction.id },
       });
+      this.logger.log(
+        `Deposit posted — user=${userId} account=${accountId} amount=$${amount} txId=${transaction.transaction.id}`,
+      );
       return {
         transaction: { ...transaction.transaction, amount },
         status: 'completed',
@@ -81,6 +85,9 @@ export class DepositsService {
       amountMinor: toMinor(amount),
       metadata: { source, pendingId: pending.id, clearAt: clearAt.toISOString() },
     });
+    this.logger.log(
+      `Deposit initiated (ACH) — user=${userId} account=${accountId} amount=$${amount} pendingId=${pending.id}`,
+    );
 
     return {
       pendingDepositId: pending.id,

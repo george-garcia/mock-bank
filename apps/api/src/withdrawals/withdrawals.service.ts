@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { AccountsService } from '../accounts/accounts.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { AuditService } from '../audit/audit.service';
@@ -6,6 +6,8 @@ import { toMinor } from '../common/money';
 
 @Injectable()
 export class WithdrawalsService {
+  private readonly logger = new Logger(WithdrawalsService.name);
+
   constructor(
     private accountsService: AccountsService,
     private ledgerService: LedgerService,
@@ -31,6 +33,9 @@ export class WithdrawalsService {
       amountMinor: toMinor(amount),
       metadata: { transactionId: transaction.transaction.id },
     });
+    this.logger.log(
+      `Withdrawal posted — user=${userId} account=${accountId} amount=$${amount} txId=${transaction.transaction.id}`,
+    );
 
     return {
       transaction: { ...transaction.transaction, amount },

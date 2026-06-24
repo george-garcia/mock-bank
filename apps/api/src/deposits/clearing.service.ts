@@ -56,6 +56,9 @@ export class ClearingService {
           amountMinor: d.amountMinor,
           metadata: { pendingId: d.id, transactionId: result.transaction.id },
         });
+        this.logger.log(
+          `Deposit cleared — account=${d.accountId} amount=$${toDecimalString(d.amountMinor)} pendingId=${d.id} txId=${result.transaction.id}`,
+        );
         cleared++;
       } catch (err) {
         this.logger.error(`Failed to clear pending deposit ${d.id}; will retry next cycle`, err as Error);
