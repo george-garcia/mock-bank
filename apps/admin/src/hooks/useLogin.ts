@@ -26,15 +26,12 @@ export function useLogin() {
     }
   };
 
-  // One-click sign-in as the pre-seeded recruiter demo staff account.
+  // One-click passwordless sign-in as the pre-seeded recruiter demo staff (no baked password).
   const demoLogin = async () => {
     setIsLoading(true);
     setError('');
     try {
-      const result = await authApi.login({
-        email: 'admin-recruiter@demo.com',
-        password: (import.meta as any).env?.VITE_DEMO_PASSWORD || '',
-      });
+      const result = await authApi.demoLogin();
       setAuth(result.staff);
       navigate('/');
     } catch (err: any) {

@@ -214,6 +214,21 @@ export class LedgerRepository {
   }
 
   /**
+   * Capture a hold and post its clearing journal in ONE transaction, so a failure in either can't
+   * leave the account inconsistent (captured hold without a posted debit, or vice-versa).
+   */
+  async captureHoldAndPost(externalRef: string, input: PostInput) {
+    this.validate(input);
+    return db.transaction(async (tx) => {
+      await tx
+        .update(holds)
+        .set({ status: 'captured', releasedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(holds.externalRef, externalRef), eq(holds.status, 'active')));
+      return this.applyJournal(tx, input);
+    });
+  }
+
+  /**
    * Reverse a posted journal with a new, offsetting journal (entries mirrored). The original
    * is never edited — it is marked 'reversed'. Idempotent: a second call returns the existing
    * reversal. Reversals are forced posts (may push an account negative).

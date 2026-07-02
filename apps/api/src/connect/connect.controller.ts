@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiSecurity, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PartnerApiKeyGuard, AuthenticatedPartner } from '../partners/partner-api-key.guard';
@@ -40,6 +41,7 @@ export class ConnectController {
 
   // ── public (hosted UI bootstrap) ──
   @Get('link-sessions/:linkToken')
+  @Throttle({ default: { limit: 20, ttl: 60000 } }) // unauthenticated — limit token probing
   @ApiOperation({ summary: 'Load non-secret session info for the hosted consent page' })
   async getSession(@Param('linkToken') linkToken: string) {
     return this.connectService.getPublicSession(linkToken);

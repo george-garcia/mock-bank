@@ -138,6 +138,26 @@ export class LedgerService {
     });
   }
 
+  /**
+   * Card CLEARING that captures the authorization hold and posts the settlement atomically — a
+   * failure can't strand a captured hold without the matching debit. Use this from the webhook.
+   */
+  async captureHoldAndClear(accountId: number, externalRef: string, input: MoveInput) {
+    const minor = this.requirePositive(input.amount);
+    const customer = await this.requireCustomer(accountId);
+    const network = await this.repo.systemLedgerAccountId('card_network');
+    return this.repo.captureHoldAndPost(externalRef, {
+      idempotencyKey: input.idempotencyKey ?? randomUUID(),
+      type: 'card_clearing',
+      description: input.description,
+      allowNegative: true,
+      entries: [
+        { ledgerAccountId: customer, direction: 'debit', amountMinor: minor },
+        { ledgerAccountId: network, direction: 'credit', amountMinor: minor },
+      ],
+    });
+  }
+
   /** Card RETURN (merchant credit): money flows back to the cardholder (credit customer). */
   async cardReturn(accountId: number, input: MoveInput) {
     const minor = this.requirePositive(input.amount);

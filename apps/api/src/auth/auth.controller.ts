@@ -48,6 +48,16 @@ export class AuthController {
     return { user: result.user };
   }
 
+  @Post('demo-login')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Passwordless one-click sign-in as the demo customer' })
+  async demoLogin(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const result = await this.authService.demoLogin(this.ctx(req));
+    setAuthCookies(res, result.session);
+    return { user: result.user };
+  }
+
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Rotate the session using the refresh cookie' })

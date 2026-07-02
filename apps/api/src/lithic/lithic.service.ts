@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Card, CardTransaction, CardTransactionEvent } from '@mock-bank/database';
 import { LithicRepository } from './lithic.repository';
@@ -23,6 +23,7 @@ export interface AuthorizeInput {
   expYear: string;
   cvv: string;
   amount: number; // minor units
+  partnerId?: number; // acquirer that submitted the charge (used to scope refunds)
   merchant: { descriptor: string; mcc?: string; city?: string; state?: string; country?: string; acceptorId?: string };
 }
 
@@ -101,7 +102,7 @@ export class LithicService {
       merchantState: input.merchant.state,
       merchantCountry: input.merchant.country,
       network: NETWORK,
-      metadata: JSON.stringify({ merchant: input.merchant }),
+      metadata: JSON.stringify({ merchant: input.merchant, partnerId: input.partnerId }),
     };
 
     // Processor-level credential checks (wrong expiry/CVV decline before reaching the program).
@@ -152,9 +153,14 @@ export class LithicService {
   }
 
   /** CREDIT_AUTHORIZATION → RETURN: a merchant credit (refund/return) — money flows to the card. */
-  async creditTransaction(originalToken: string, amountMinor: number): Promise<LithicTransaction> {
+  async creditTransaction(partnerId: number, originalToken: string, amountMinor: number): Promise<LithicTransaction> {
     const original = await this.repo.findTransactionByToken(originalToken);
     if (!original) throw new NotFoundException('Original transaction not found');
+    // A partner may only refund an authorization it submitted.
+    const meta = original.metadata ? JSON.parse(original.metadata) : {};
+    if (meta.partnerId != null && meta.partnerId !== partnerId) {
+      throw new ForbiddenException('Refund not allowed for this authorization');
+    }
     const card = await this.repo.findCardById(original.cardId);
     if (!card) throw new NotFoundException('Card not found');
 

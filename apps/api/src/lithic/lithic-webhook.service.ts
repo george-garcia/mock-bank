@@ -51,8 +51,8 @@ export class LithicWebhookService {
 
     switch (latest) {
       case 'CLEARING': {
-        await this.ledger.captureHold(`auth:${tx.token}`);
-        const result = await this.ledger.cardClearing(accountId, {
+        // Capture the hold and post the clearing atomically (one transaction).
+        const result = await this.ledger.captureHoldAndClear(accountId, `auth:${tx.token}`, {
           amount: toDecimalString(tx.settled_amount),
           description: `Card purchase: ${tx.merchant.descriptor}`,
           idempotencyKey: `card_clearing:${tx.token}`,

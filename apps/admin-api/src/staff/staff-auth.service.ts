@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import * as bcryptjs from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import { StaffRole } from '@mock-bank/types';
 import { AuditService } from '../audit/audit.service';
 import { StaffRepository } from './staff.repository';
@@ -7,6 +8,8 @@ import { StaffSessionService } from './staff-session.service';
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
+// The single staff account the passwordless demo-login endpoint signs into.
+const DEMO_STAFF_EMAIL = 'admin-recruiter@demo.com';
 
 interface RequestContext {
   ip?: string;
@@ -55,6 +58,22 @@ export class StaffAuthService {
     }
 
     await this.auditService.record({ actorType: 'staff', actorUserId: staff.id, action: 'staff.login', ip: ctx.ip });
+    const session = await this.staffSessionService.issueForStaff(staff, ctx);
+    return { staff: session.staff, session };
+  }
+
+  /**
+   * Passwordless one-click sign-in as the pre-seeded recruiter demo admin. Self-healing: creates the
+   * demo staff (admin role) if missing so the portfolio button always works. Only ever touches the
+   * fixed demo email.
+   */
+  async demoLogin(ctx: RequestContext = {}) {
+    let staff = await this.staffRepo.findByEmail(DEMO_STAFF_EMAIL);
+    if (!staff) {
+      const passwordHash = await bcryptjs.hash(randomBytes(24).toString('hex'), 10);
+      staff = await this.staffRepo.create({ email: DEMO_STAFF_EMAIL, passwordHash, firstName: 'Riley', lastName: 'Recruiter', role: 'admin' });
+    }
+    await this.auditService.record({ actorType: 'staff', actorUserId: staff.id, action: 'staff.demo_login', ip: ctx.ip });
     const session = await this.staffSessionService.issueForStaff(staff, ctx);
     return { staff: session.staff, session };
   }

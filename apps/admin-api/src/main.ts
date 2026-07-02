@@ -14,10 +14,13 @@ async function bootstrap() {
   app.use(helmet());
   app.use(cookieParser());
 
+  const allowedOrigins = [process.env.ADMIN_FRONTEND_URL, 'http://localhost:5174']
+    .filter(Boolean)
+    .map((u) => { try { return new URL(u!).origin; } catch { return u!; } });
   app.enableCors({
+    // Exact-origin match (not startsWith — that would allow `localhost:5174.evil.com`).
     origin: (origin, callback) => {
-      const allowed = [process.env.ADMIN_FRONTEND_URL, 'http://localhost:5174'].filter(Boolean);
-      if (!origin || allowed.some((url) => origin.startsWith(url!))) {
+      if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS blocked: ${origin}`), false);

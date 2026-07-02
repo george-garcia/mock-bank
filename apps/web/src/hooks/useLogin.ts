@@ -22,19 +22,12 @@ export function useLogin() {
     navigate('/');
   };
 
-  // One-click sign-in as the pre-seeded recruiter demo customer.
+  // One-click passwordless sign-in as the pre-seeded recruiter demo customer (no baked password).
   const demoLogin = async () => {
     setIsLoading(true);
     setError('');
     try {
-      const result = await authApi.login({
-        email: 'recruiter@demo.com',
-        password: (import.meta as any).env?.VITE_DEMO_PASSWORD || '',
-      });
-      if (result.requiresTwoFactor) {
-        setChallenge({ token: result.challengeToken, method: result.method });
-        return;
-      }
+      const result = await authApi.demoLogin();
       completeAuth(result.user);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Demo sign-in is unavailable right now.');

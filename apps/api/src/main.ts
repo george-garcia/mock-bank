@@ -19,6 +19,13 @@ function assertSecrets() {
     }
     console.warn(`[security] WARNING: ${msg}. Set a strong JWT_SECRET — this is fatal in production.`);
   }
+  // Inbound Lithic webhooks must be signature-verified in production.
+  if (process.env.NODE_ENV === 'production' && !process.env.LITHIC_WEBHOOK_SECRET) {
+    throw new Error('[security] LITHIC_WEBHOOK_SECRET must be set in production (webhook signatures).');
+  }
+  if (!process.env.SMTP_HOST) {
+    console.warn('[email] SMTP_HOST not set — 2FA/OTP codes are logged to the console (dev only).');
+  }
 }
 
 async function bootstrap() {
@@ -30,14 +37,13 @@ async function bootstrap() {
   app.use(helmet());
   app.use(cookieParser());
 
+  const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:5174']
+    .filter(Boolean)
+    .map((u) => { try { return new URL(u!).origin; } catch { return u!; } });
   app.enableCors({
+    // Exact-origin match (not startsWith — that would allow `localhost:5173.evil.com`).
     origin: (origin, callback) => {
-      const allowed = [
-        process.env.FRONTEND_URL,
-        'http://localhost:5173',
-        'http://localhost:5174',
-      ].filter(Boolean);
-      if (!origin || allowed.some(url => origin.startsWith(url!))) {
+      if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS blocked: ${origin}`), false);

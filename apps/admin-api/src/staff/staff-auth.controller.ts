@@ -27,6 +27,16 @@ export class StaffAuthController {
     return { staff: result.staff };
   }
 
+  @Post('demo-login')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Passwordless one-click sign-in as the demo admin' })
+  async demoLogin(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const result = await this.staffAuthService.demoLogin({ ip: req.ip, userAgent: req.headers['user-agent'] });
+    setStaffAuthCookies(res, result.session);
+    return { staff: result.staff };
+  }
+
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Rotate the staff session' })

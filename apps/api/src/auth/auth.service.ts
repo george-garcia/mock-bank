@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import * as bcryptjs from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 import { AuditService } from '../audit/audit.service';
@@ -9,6 +10,8 @@ import { LoginDto } from './dto/login.dto';
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
+// The single account the passwordless demo-login endpoint signs into.
+const DEMO_CUSTOMER_EMAIL = 'recruiter@demo.com';
 
 interface RequestContext {
   ip?: string;
@@ -85,6 +88,22 @@ export class AuthService {
     }
 
     await this.auditService.record({ actorType: 'customer', actorUserId: user.id, action: 'auth.login', ...this.ctxMeta(ctx) });
+    const session = await this.sessionService.issueForUser(user, ctx);
+    return { user: session.user, session };
+  }
+
+  /**
+   * Passwordless one-click sign-in as the pre-seeded recruiter demo customer. Self-healing: if the
+   * demo user is missing (fresh DB, no demo seed), it is created so the portfolio button always
+   * works. Only ever touches the fixed demo email, so it is safe to expose publicly.
+   */
+  async demoLogin(ctx: RequestContext = {}) {
+    let user = await this.usersService.findByEmail(DEMO_CUSTOMER_EMAIL);
+    if (!user) {
+      const passwordHash = await bcryptjs.hash(randomBytes(24).toString('hex'), 10);
+      user = await this.usersService.create({ email: DEMO_CUSTOMER_EMAIL, passwordHash, firstName: 'Riley', lastName: 'Recruiter' });
+    }
+    await this.auditService.record({ actorType: 'customer', actorUserId: user.id, action: 'auth.demo_login', ...this.ctxMeta(ctx) });
     const session = await this.sessionService.issueForUser(user, ctx);
     return { user: session.user, session };
   }

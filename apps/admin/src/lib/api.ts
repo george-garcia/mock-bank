@@ -48,6 +48,7 @@ async function unwrap<T = any>(request: Promise<AxiosResponse<{ data: T }>>): Pr
 // Staff auth
 export const authApi = {
   login: (data: { email: string; password: string }) => unwrap(api.post('/auth/login', data)),
+  demoLogin: () => unwrap(api.post('/auth/demo-login')),
   logout: () => api.post('/auth/logout'),
   refresh: () => api.post('/auth/refresh'),
   me: () => unwrap(api.get('/auth/me')),

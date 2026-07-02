@@ -31,6 +31,7 @@ export class NetworkService {
       expYear: dto.card.expYear,
       cvv: dto.card.cvv,
       amount: dto.amount, // minor units
+      partnerId: partner.id,
       merchant: { descriptor: dto.merchant.name, mcc: dto.merchant.mcc, city: dto.merchant.city },
     });
 
@@ -77,7 +78,7 @@ export class NetworkService {
   }
 
   async refund(partner: AuthenticatedPartner, dto: CreateRefundDto) {
-    const tx = await this.lithic.creditTransaction(dto.authorizationToken, dto.amount);
+    const tx = await this.lithic.creditTransaction(partner.id, dto.authorizationToken, dto.amount);
     await this.auditService.record({
       action: 'network.refund',
       targetType: 'card_transaction',

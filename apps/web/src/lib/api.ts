@@ -55,6 +55,7 @@ export const authApi = {
     unwrap(api.post('/auth/register', data)),
   login: (data: { email: string; password: string }) =>
     unwrap(api.post('/auth/login', data)),
+  demoLogin: () => unwrap(api.post('/auth/demo-login')),
   logout: () => api.post('/auth/logout'),
   refresh: () => api.post('/auth/refresh'),
   profile: () => unwrap(api.get('/users/profile')),
